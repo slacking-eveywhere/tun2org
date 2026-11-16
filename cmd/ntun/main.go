@@ -162,7 +162,6 @@ func runConfig(args []string) int {
 	}
 }
 
-
 func readPassword(prompt string) (string, error) {
 	fmt.Fprint(os.Stderr, prompt)
 	pw, err := readPasswordFromTerminal()

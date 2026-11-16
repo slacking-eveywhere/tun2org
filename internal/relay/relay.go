@@ -37,7 +37,6 @@ type Dialer interface {
 	DialSession(ctx context.Context) (io.ReadWriteCloser, error)
 }
 
-
 // Options tunes the Relay reconnect loop.
 type Options struct {
 	Dialer       Dialer
