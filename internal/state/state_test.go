@@ -26,7 +26,6 @@ func TestWriteReadRoundTrip(t *testing.T) {
 		Device:         "tun0",
 		Routes:         []string{"10.120.1.10/32", "fd00::/48"},
 		PostStopScript: "docker stop reverse-tunnel",
-		ConfigPath:     "/home/u/.tun2org/config.json",
 	}
 	p, err := state.Write(in)
 	if err != nil {

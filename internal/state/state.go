@@ -30,8 +30,6 @@ type File struct {
 	Routes []string `json:"routes"`
 	// PostStopScript is the script to run on teardown (may be empty).
 	PostStopScript string `json:"post_stop_script,omitempty"`
-	// ConfigPath is the config file used (for logging / `down`).
-	ConfigPath string `json:"config_path,omitempty"`
 }
 
 // Path returns the default state file location:

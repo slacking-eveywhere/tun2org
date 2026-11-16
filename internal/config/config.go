@@ -45,7 +45,7 @@ type Config struct {
 	ForwardPort int `json:"forward_port,omitempty"`
 
 	// Mode is direct or bastion. Default bastion.
-	Mode Mode `json:"mode,omitempty"`
+	Mode    Mode   `json:"mode,omitempty"`
 	Bastion string `json:"bastion,omitempty"`
 	// BastionPort is the relay SSH port. Default 22.
 	BastionPort int `json:"bastion_port,omitempty"`
@@ -95,26 +95,9 @@ type Config struct {
 	// that forwards over the mux. Empty = disabled (phase 5).
 	DNSListen string `json:"dns_listen,omitempty"`
 
-	// UDPTimeout is the idle timeout for UDP sessions in the netstack.
-	// Default 30s. 0 = no timeout.
-	UDPTimeout time.Duration `json:"udp_timeout,omitempty"`
-	// TCPSendBufferSize / TCPReceiveBufferSize / TCPAutoTuning are passthrough
-	// netstack TCP buffer knobs (phase 3).
-	TCPSendBufferSize    string `json:"tcp_sndbuf,omitempty"`
-	TCPReceiveBufferSize string `json:"tcp_rcvbuf,omitempty"`
-	TCPAutoTuning        bool   `json:"tcp_auto_tuning,omitempty"`
-
-	// TelnetAddressToUse / TelnetPortToUse are the optional upstream liveness
-	// check target (legacy --test behaviour).
-	TelnetAddressToUse string `json:"telnet_address_to_use,omitempty"`
-	TelnetPortToUse    int    `json:"telnet_port_to_use,omitempty"`
-
 	// PostStartScript / PostStopScript run on tunnel up/down (legacy).
 	PostStartScript string `json:"post_start_script,omitempty"`
 	PostStopScript  string `json:"post_stop_script,omitempty"`
-
-	// LogLevel: debug|info|warn|error. Default info.
-	LogLevel string `json:"log_level,omitempty"`
 
 	// PingEvery is the mux keepalive interval. Default 30s.
 	PingEvery time.Duration `json:"ping_every,omitempty"`
@@ -154,9 +137,6 @@ func (c *Config) Defaults() {
 	if c.TunNetwork == "" {
 		c.TunNetwork = "198.18.0.1/15"
 	}
-	if c.LogLevel == "" {
-		c.LogLevel = "info"
-	}
 	if c.PingEvery == 0 {
 		c.PingEvery = 30 * time.Second
 	}
@@ -165,9 +145,6 @@ func (c *Config) Defaults() {
 	}
 	if c.ReconnectMax == 0 {
 		c.ReconnectMax = 30 * time.Second
-	}
-	if c.UDPTimeout == 0 {
-		c.UDPTimeout = 30 * time.Second
 	}
 	if c.DNSHijack == nil {
 		t := true
@@ -221,13 +198,11 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	type cfgAlias Config
 	return json.Marshal(struct {
 		cfgAlias
-		UDPTimeout   string `json:"udp_timeout,omitempty"`
 		PingEvery    string `json:"ping_every,omitempty"`
 		ReconnectMin string `json:"reconnect_min,omitempty"`
 		ReconnectMax string `json:"reconnect_max,omitempty"`
 	}{
 		cfgAlias:     cfgAlias(c),
-		UDPTimeout:   time.Duration(c.UDPTimeout).String(),
 		PingEvery:    time.Duration(c.PingEvery).String(),
 		ReconnectMin: time.Duration(c.ReconnectMin).String(),
 		ReconnectMax: time.Duration(c.ReconnectMax).String(),
@@ -251,15 +226,14 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
-// UnmarshalJSON decodes the config, allowing duration fields (udp_timeout,
-// ping_every, reconnect_min, reconnect_max) to be written as JSON strings such
+// UnmarshalJSON decodes the config, allowing duration fields (ping_every,
+// reconnect_min, reconnect_max) to be written as JSON strings such
 // as "30s". The duration fields are shadowed with RawMessage so the rest of the
 // struct decodes normally.
 func (c *Config) UnmarshalJSON(data []byte) error {
 	type cfgAlias Config
 	var aux struct {
 		cfgAlias
-		UDPTimeout   json.RawMessage `json:"udp_timeout"`
 		PingEvery    json.RawMessage `json:"ping_every"`
 		ReconnectMin json.RawMessage `json:"reconnect_min"`
 		ReconnectMax json.RawMessage `json:"reconnect_max"`
@@ -287,9 +261,6 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		return time.Duration(n), nil
 	}
 	var err error
-	if c.UDPTimeout, err = parseDuration(aux.UDPTimeout); err != nil {
-		return fmt.Errorf("config: udp_timeout: %w", err)
-	}
 	if c.PingEvery, err = parseDuration(aux.PingEvery); err != nil {
 		return fmt.Errorf("config: ping_every: %w", err)
 	}

@@ -43,8 +43,8 @@ type Conn struct {
 	ready chan struct{}
 	errCh chan error // buffered 1, for dial failures before ready
 
-	closed atomic.Bool
-	done   chan struct{}
+	closed  atomic.Bool
+	done    chan struct{}
 	readErr error
 
 	writeMu sync.Mutex

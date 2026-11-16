@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -113,6 +112,3 @@ func bringDownDevice(name string) error {
 	cmd2 := exec.CommandContext(ctx, "ifconfig", name, "destroy")
 	return cmd2.Run()
 }
-
-// keep strconv imported (used for pid formatting if expanded later).
-var _ = strconv.Itoa

@@ -9,8 +9,6 @@ package tun
 
 import (
 	"fmt"
-	"io"
-	"strings"
 
 	wg "golang.zx2c4.com/wireguard/tun"
 )
@@ -103,16 +101,6 @@ func (d *Device) Close() error {
 		return nil
 	}
 	return d.dev.Close()
-}
-
-// AsReadWriter returns d as an io.ReadWriter (trivial; Device already is one).
-// Convenience for the netstack link endpoint constructor.
-func (d *Device) AsReadWriter() io.ReadWriter { return d }
-
-// ErrorIsPlatformUnsupported reports whether err is the platform-not-supported
-// sentinel returned by createTUN on unsupported OS/arch combos.
-func ErrorIsPlatformUnsupported(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "platform unsupported")
 }
 
 // defaultMTU is overridden per-OS via build-tagged files if needed.

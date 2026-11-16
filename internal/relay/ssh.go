@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,24 +29,19 @@ type sshDialer struct {
 	// reconnect so we don't re-read the file each attempt.
 	agentBin []byte
 	agentSum string // hex sha256[:8], used in the remote cache filename
-	once     sync.Once
-	loadErr  error
 }
 
 // NewDialer builds a Dialer from config. It does not connect yet.
 func NewDialer(cfg *config.Config) (Dialer, error) {
-	d := &sshDialer{cfg: cfg}
-	// Eagerly read + hash the agent binary so misconfiguration surfaces early.
-	d.once.Do(func() {
-		data, err := os.ReadFile(cfg.AgentPath)
-		if err != nil {
-			d.loadErr = fmt.Errorf("relay: read agent %s: %w", cfg.AgentPath, err)
-			return
-		}
-		d.agentBin = data
-		d.agentSum = agentHash(data)
-	})
-	return d, d.loadErr
+	data, err := os.ReadFile(cfg.AgentPath)
+	if err != nil {
+		return nil, fmt.Errorf("relay: read agent %s: %w", cfg.AgentPath, err)
+	}
+	return &sshDialer{
+		cfg:      cfg,
+		agentBin: data,
+		agentSum: agentHash(data),
+	}, nil
 }
 
 // DialSession connects, ensures the agent is uploaded, and execs it.
@@ -130,7 +126,7 @@ func (d *sshDialer) connect(ctx context.Context) (*ssh.Client, error) {
 	// its own to bind.
 	if d.cfg.Interface != "" {
 		if tc, ok := conn.(*net.TCPConn); ok {
-			if err := bindToInterface(tc, d.cfg.Interface); err != nil {
+			if err := bindToInterfaceOS(tc, d.cfg.Interface); err != nil {
 				conn.Close()
 				return nil, fmt.Errorf("relay: bind interface %s: %w", d.cfg.Interface, err)
 			}
@@ -403,7 +399,7 @@ func (d *sshDialer) ensureAgent(client *ssh.Client, remotePath string) error {
 		return err
 	}
 	defer up.Close()
-	up.Stdin = bytesReader(d.agentBin)
+	up.Stdin = bytes.NewReader(d.agentBin)
 	if err := up.Run(fmt.Sprintf("mkdir -p %s && cat > %s && chmod +x %s",
 		shellQuote(parentDir(remotePath)),
 		shellQuote(remotePath),

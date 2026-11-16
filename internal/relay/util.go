@@ -1,11 +1,9 @@
 package relay
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path"
@@ -33,19 +31,13 @@ func agentSigners() ([]ssh.Signer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial agent socket: %w", err)
 	}
+	defer conn.Close()
 	a := agent.NewClient(conn)
 	signers, err := a.Signers()
 	if err != nil {
 		return nil, fmt.Errorf("list signers: %w", err)
 	}
 	return signers, nil
-}
-
-// bindToInterface binds conn's underlying fd to the named interface on Linux
-// (SO_BINDTODEVICE) so the SSH socket never routes through the TUN we created.
-// On non-Linux it is a no-op (handled by the _ / _linux split below).
-func bindToInterface(conn net.Conn, iface string) error {
-	return bindToInterfaceOS(conn, iface)
 }
 
 // shellQuote single-quotes a string for safe inclusion in a remote shell
@@ -59,7 +51,3 @@ func shellQuote(s string) string {
 func parentDir(p string) string {
 	return path.Dir(p)
 }
-
-// bytesReader returns a new io.Reader over b (kept as a helper so ssh.go does
-// not import bytes directly for a one-liner).
-func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }

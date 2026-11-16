@@ -67,7 +67,7 @@ func TestAgentRunEcho(t *testing.T) {
 	localEnd, agentEnd := net.Pipe()
 
 	cfg := agent.Config{
-		Dialer: &net.Dialer{Timeout: 5 * time.Second},
+		Dialer:    &net.Dialer{Timeout: 5 * time.Second},
 		PingEvery: 0,
 	}
 	go func() {
@@ -107,7 +107,7 @@ func TestAgentRunDialFailure(t *testing.T) {
 
 	// Dialer that always fails.
 	cfg := agent.Config{
-		Dialer: failingDialer{},
+		Dialer:    failingDialer{},
 		PingEvery: 0,
 	}
 	go func() {

@@ -4,8 +4,12 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestExpandProxyCommand(t *testing.T) {
@@ -81,6 +85,10 @@ func TestDialProxyCommandContextCancellation(t *testing.T) {
 // TestProxyConnCloseKillsProcessGroup verifies that Close reaps the whole
 // proxy process group, so a child spawned by the proxy (e.g. ssh) can't be
 // stranded to keep the transport open after shutdown.
+//
+// Note: environments whose init does not reap orphaned children can keep a
+// zombie in the group (kill(-pgid,0) succeeds). A zombie cannot hold the
+// transport, so it counts as dead here.
 func TestProxyConnCloseKillsProcessGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -95,11 +103,63 @@ func TestProxyConnCloseKillsProcessGroup(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	// After Close the process group must be gone (ESRCH).
-	if err := syscall.Kill(-pid, 0); err == nil {
-		t.Fatalf("process group %d still alive after Close", pid)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := syscall.Kill(-pid, 0)
+		if err != nil {
+			break // ESRCH: group gone
+		}
+		if !groupHasRunnableMember(pid) || !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	_ = ctx
+	if err := syscall.Kill(-pid, 0); err == nil && groupHasRunnableMember(pid) {
+		t.Fatalf("process group %d still has live members after Close", pid)
+	}
+}
+
+// groupHasRunnableMember reports whether any member of the process group is
+// in a runnable (non-zombie) state. On non-/proc systems it assumes alive.
+func groupHasRunnableMember(pgid int) bool {
+	matches, err := filepath.Glob("/proc/[0-9]*/stat")
+	if err != nil || len(matches) == 0 {
+		return true
+	}
+	for _, m := range matches {
+		data, err := os.ReadFile(m)
+		if err != nil {
+			continue // raced with exit
+		}
+		s := string(data)
+		i := strings.LastIndex(s, ")")
+		if i < 0 || i+2 >= len(s) {
+			continue
+		}
+		rest := strings.Fields(s[i+2:]) // [state, ppid, pgrp, ...]
+		if len(rest) < 3 {
+			continue
+		}
+		if atoiSafe(rest[2]) != pgid {
+			continue
+		}
+		if rest[0] != "Z" {
+			return true
+		}
+	}
+	return false
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return -1
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 // TestProxyConnSatisfiesNetConn asserts proxyConn implements net.Conn.

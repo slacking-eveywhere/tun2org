@@ -21,20 +21,20 @@ import (
 // Config configures an agent run.
 type Config struct {
 	// Dialer dials the target (TCP). Defaults to a net.Dialer with sane timeouts.
-	Dialer interface {
-		Dial(network, addr string) (net.Conn, error)
-	}
-	// UDPDialer dials the target (UDP). Defaults to a net.Dialer. If nil and a
-	// UDP_OPEN arrives, the agent uses a connected UDP socket via net.Dial.
-	UDPDialer interface {
-		Dial(network, addr string) (net.Conn, error)
-	}
+	Dialer Dialer
+	// UDPDialer dials the target (UDP). Defaults to a net.Dialer.
+	UDPDialer Dialer
 
 	// Log receives human-readable status lines. nil = discard.
 	Log Logger
 
 	// PingEvery is the mux keepalive interval. 0 = 30s default.
 	PingEvery time.Duration
+}
+
+// Dialer dials a target address.
+type Dialer interface {
+	Dial(network, addr string) (net.Conn, error)
 }
 
 // Logger is the minimal logging interface used by the agent.
@@ -53,18 +53,14 @@ func (c *Config) logger() Logger {
 	return discardLogger{}
 }
 
-func (c *Config) udpDialer() interface {
-	Dial(network, addr string) (net.Conn, error)
-} {
+func (c *Config) udpDialer() Dialer {
 	if c.UDPDialer != nil {
 		return c.UDPDialer
 	}
 	return &net.Dialer{Timeout: 10 * time.Second}
 }
 
-func (c *Config) dialer() interface {
-	Dial(network, addr string) (net.Conn, error)
-} {
+func (c *Config) dialer() Dialer {
 	if c.Dialer != nil {
 		return c.Dialer
 	}
@@ -113,13 +109,10 @@ func Run(rwc io.ReadWriteCloser, cfg Config) error {
 }
 
 // RunStdio is a convenience for the ntun-agent binary: it runs the agent over
-// os.Stdin/os.Stdout and closes them on exit.
+// os.Stdin/os.Stdout. Closing it does not close the process's real stdio
+// (the process is about to exit anyway).
 func RunStdio(cfg Config) error {
-	rwc := stdioConn{}
-	if err := Run(rwc, cfg); err != nil {
-		return err
-	}
-	return nil
+	return Run(stdioConn{}, cfg)
 }
 
 // stdioConn adapts os.Stdin/Stdout (separate fds) into a single

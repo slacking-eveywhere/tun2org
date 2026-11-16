@@ -10,7 +10,7 @@ hop, and the 1024-byte read cap.
 - Client: `iperf3 -c <target> -t 15 -P 4` (4 parallel streams, 15s).
 - Capture: throughput (Mbps) and host CPU% (iperf3 JSON).
 - Each variant brought up/down with its own config; fresh run between variants.
-- Run `./bench.sh`; results appended to `benchmarks.tsv`.
+- Record results in `benchmarks.tsv` (throughput_mbps, cpu_pct per run).
 
 ## Expected wins (design rationale)
 
@@ -27,7 +27,7 @@ gone (agent cached + PING/PONG detection). Latency should drop (fewer copies).
 
 ## Captured results
 
-> Fill in after running `./bench.sh` in your env. Paste the `benchmarks.tsv`
+> Fill in after running the iperf3 method above in your env. Paste the `benchmarks.tsv`
 > table here.
 
 ```

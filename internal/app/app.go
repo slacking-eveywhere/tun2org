@@ -77,7 +77,6 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		Device:         dev.Name(),
 		Routes:         routeCIDRs,
 		PostStopScript: cfg.PostStopScript,
-		ConfigPath:     "", // filled by caller via config if desired
 	}); err != nil {
 		log.Printf("app: state write: %v", err)
 	}
@@ -110,15 +109,14 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		Log:          logAdapter{log: log, prefix: "relay"},
 	})
 	tnl := tunnel.New(tunnel.Options{
-		Dialer:     &relayDialer{r: r},
-		Log:        logAdapter{log: log, prefix: "tunnel"},
-		UDPTimeout: cfg.UDPTimeout,
-		DNSHijack:  cfg.DNSHijack != nil && *cfg.DNSHijack,
-		DNSRemote:  cfg.DNSRemote,
+		Dialer:    &relayDialer{r: r},
+		Log:       logAdapter{log: log, prefix: "tunnel"},
+		DNSHijack: cfg.DNSHijack != nil && *cfg.DNSHijack,
+		DNSRemote: cfg.DNSRemote,
 	})
 
 	// 5. gVisor netstack.
-	link, err := netstack.NewLinkEndpoint(dev, uint32(dev.MTU()), devPacketOffset(dev))
+	link, err := netstack.NewLinkEndpoint(dev, uint32(dev.MTU()), dev.Offset())
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -227,7 +225,6 @@ type relayDialer struct {
 
 func (d *relayDialer) Open(a mux.Addr) (*mux.Conn, error)       { return d.r.Open(a) }
 func (d *relayDialer) OpenUDP(a mux.Addr) (*mux.UDPConn, error) { return d.r.OpenUDP(a) }
-func (d *relayDialer) Relay() *relay.Relay                      { return d.r }
 
 // logAdapter prefixes log lines.
 type logAdapter struct {
@@ -237,9 +234,4 @@ type logAdapter struct {
 
 func (l logAdapter) Printf(format string, args ...any) {
 	l.log.Printf(l.prefix+": "+format, args...)
-}
-
-// devPacketOffset returns the per-OS packet header offset for the device.
-func devPacketOffset(dev *tun.Device) int {
-	return dev.Offset()
 }

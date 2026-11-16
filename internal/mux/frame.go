@@ -1,7 +1,6 @@
 // Package mux is a binary, length-prefixed connection multiplexer over any
 // io.ReadWriteCloser (typically an SSH session stdin/stdout pipe).
 //
-//
 // Wire format (all integers big-endian):
 //
 //	Frame:
@@ -38,15 +37,15 @@ import (
 type FrameType byte
 
 const (
-	TypeOpen     FrameType = 0x01
-	TypeOpenOK   FrameType = 0x02
-	TypeData     FrameType = 0x03
-	TypeClose    FrameType = 0x04
-	TypeErr      FrameType = 0x05
-	TypePing     FrameType = 0x06
-	TypePong     FrameType = 0x07
-	TypeUDPOpen  FrameType = 0x08
-	TypeUDPData  FrameType = 0x09
+	TypeOpen    FrameType = 0x01
+	TypeOpenOK  FrameType = 0x02
+	TypeData    FrameType = 0x03
+	TypeClose   FrameType = 0x04
+	TypeErr     FrameType = 0x05
+	TypePing    FrameType = 0x06
+	TypePong    FrameType = 0x07
+	TypeUDPOpen FrameType = 0x08
+	TypeUDPData FrameType = 0x09
 )
 
 // Address type identifiers embedded in OPEN/UDP_OPEN payloads.
@@ -128,21 +127,6 @@ func (a Addr) String() string {
 	return net.JoinHostPort(host, fmt.Sprintf("%d", a.Port))
 }
 
-// FromTCPAddr converts a *net.TCPAddr to an Addr.
-func FromTCPAddr(a *net.TCPAddr) Addr {
-	out := Addr{Port: uint16(a.Port)}
-	if ip4 := a.IP.To4(); ip4 != nil {
-		out.Type = AddrIPv4
-		copy(out.IPv4[:], ip4)
-	} else if a.IP != nil {
-		out.Type = AddrIPv6
-		copy(out.IPv6[:], a.IP.To16())
-	} else {
-		out.Type = AddrIPv4
-	}
-	return out
-}
-
 // FromHostPort resolves a host:port string into an Addr. Literal IPs become
 // AddrIPv4/AddrIPv6; everything else becomes AddrDomain (resolution happens
 // remotely, on the agent side, which is the whole point of tunneling).
@@ -186,8 +170,8 @@ func readFrame(r io.Reader) (Frame, error) {
 	return Frame{Type: typ, Payload: payload}, nil
 }
 
-// writeFrame writes a single frame to w. It is not concurrency-safe; callers
-// must serialize writes (the Session does via a mutex + buffered writer).
+// writeFrame writes a single frame to w. It is not concurrency-safe; the
+// Session serializes writes through its writer loop.
 func writeFrame(w io.Writer, typ FrameType, payload []byte) error {
 	if len(payload) > MaxFrameLen {
 		return fmt.Errorf("mux: payload too large: %d (max %d)", len(payload), MaxFrameLen)

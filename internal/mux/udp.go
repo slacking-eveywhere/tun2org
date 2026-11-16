@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// udpRecvCap bounds the inbound UDP_DATA frames buffered per UDPConn.
-const udpRecvCap = 128
-
 // UDPDatagram is one inbound UDP datagram plus its source address (the peer
 // the agent saw on its dialed socket).
 type UDPDatagram struct {
@@ -47,7 +44,7 @@ func newUDPConn(id ConnID, sess *Session, addr Addr) *UDPConn {
 		id:     id,
 		sess:   sess,
 		addr:   addr,
-		recvCh: make(chan *UDPDatagram, udpRecvCap),
+		recvCh: make(chan *UDPDatagram, recvCap),
 		ready:  make(chan struct{}),
 		errCh:  make(chan error, 1),
 		done:   make(chan struct{}),
@@ -150,7 +147,7 @@ func (c *UDPConn) Close() error {
 	return nil
 }
 
-func (c *UDPConn) LocalAddr() net.Addr  { return c.addr.asNetAddr() }
+func (c *UDPConn) LocalAddr() net.Addr              { return c.addr.asNetAddr() }
 func (c *UDPConn) SetDeadline(time.Time) error      { return nil }
 func (c *UDPConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *UDPConn) SetWriteDeadline(time.Time) error { return nil }

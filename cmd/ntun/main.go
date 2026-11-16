@@ -1,10 +1,5 @@
 // Command ntun is the local client of the ntun tunnel: TUN device, gVisor
 // netstack, SSH relay, and the local side of the mux.
-//
-// Phase 2: `up` parses JSON config, builds the SSH relay, and keeps the
-// session alive (reconnect on failure). No TUN/netstack yet (phase 3); `up`
-// currently just establishes the transport so SSH/auth/reconnect can be
-// integration-tested manually.
 package main
 
 import (
@@ -52,8 +47,6 @@ Usage:
   ntun config init [--config PATH]
   ntun config edit [--config PATH]
   ntun version
-
-Phase 6: down tears down a running/stale instance from the state file.
 `, version.String())
 }
 

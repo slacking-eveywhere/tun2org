@@ -2,6 +2,7 @@ package mux
 
 import (
 	"bufio"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -51,6 +52,7 @@ type SessionConfig struct {
 //     the read loop; a full queue means the writer (and thus the transport)
 //     is wedged, so the frame is dropped and the ping watchdog kills the
 //     session instead of deadlocking it.
+//
 // The writer prefers ctlCh so keepalives overtake bulk data.
 type Session struct {
 	rwc io.ReadWriteCloser
@@ -63,15 +65,22 @@ type Session struct {
 	cfg SessionConfig
 
 	connsMu sync.Mutex
-	conns   map[ConnID]*Conn
+	// conns holds both TCP (*Conn) and UDP (*UDPConn) streams, keyed by
+	// ConnID. Both implement the connStream interface below.
+	conns  map[ConnID]connStream
 	closed atomic.Bool
 	done   chan struct{}
 	err    error
 
 	pongCh chan struct{}
+}
 
-	udpMu  sync.Mutex
-	udpConns map[ConnID]*UDPConn
+// connStream is the registry-facing surface shared by Conn and UDPConn.
+type connStream interface {
+	ID() ConnID
+	markReady()
+	markFailed(err error)
+	markClosed(err error)
 }
 
 // outQueueCap bounds data frames queued for the writer. With 64KiB frames
@@ -110,8 +119,7 @@ func NewSession(rwc io.ReadWriteCloser, cfg SessionConfig) *Session {
 		outCh:  make(chan outFrame, outQueueCap),
 		ctlCh:  make(chan outFrame, ctlQueueCap),
 		cfg:    cfg,
-		conns:  make(map[ConnID]*Conn),
-		udpConns: make(map[ConnID]*UDPConn),
+		conns:  make(map[ConnID]connStream),
 		done:   make(chan struct{}),
 		pongCh: make(chan struct{}, 1),
 	}
@@ -222,7 +230,7 @@ func (s *Session) Open(addr Addr) (*Conn, error) {
 		return nil, ErrSessionClosed
 	}
 	var id ConnID
-	if _, err := readRand(id[:]); err != nil {
+	if _, err := rand.Read(id[:]); err != nil {
 		return nil, err
 	}
 	c := newConn(id, s)
@@ -418,10 +426,6 @@ func (s *Session) handleOpenOK(p []byte) {
 	// OPEN_OK acknowledges both TCP OPEN and UDP OPEN (keyed by ConnID).
 	if c := s.lookup(id); c != nil {
 		c.markReady()
-		return
-	}
-	if c := s.lookupUDP(id); c != nil {
-		c.markReady()
 	}
 }
 
@@ -431,8 +435,8 @@ func (s *Session) handleData(p []byte) {
 	}
 	var id ConnID
 	copy(id[:], p[:ConnIDLen])
-	c := s.lookup(id)
-	if c == nil {
+	c, ok := s.lookup(id).(*Conn)
+	if !ok {
 		// Unknown conn: the local side has already closed it. Dropping the
 		// frame (instead of erroring back) avoids control-frame churn when the
 		// peer races a close against in-flight data.
@@ -513,11 +517,6 @@ func (s *Session) handleClose(p []byte) {
 	if c := s.lookup(id); c != nil {
 		c.markClosed(io.EOF)
 		s.unregister(id)
-		return
-	}
-	if c := s.lookupUDP(id); c != nil {
-		c.markClosed(io.EOF)
-		s.unregisterUDP(id)
 	}
 }
 
@@ -536,12 +535,6 @@ func (s *Session) handleErr(p []byte) {
 		c.markFailed(err)
 		c.markClosed(err)
 		s.unregister(id)
-		return
-	}
-	if c := s.lookupUDP(id); c != nil {
-		c.markFailed(err)
-		c.markClosed(err)
-		s.unregisterUDP(id)
 	}
 }
 
@@ -568,9 +561,9 @@ func (s *Session) pingLoop() {
 	}
 }
 
-func (s *Session) register(c *Conn) {
+func (s *Session) register(c connStream) {
 	s.connsMu.Lock()
-	s.conns[c.id] = c
+	s.conns[c.ID()] = c
 	s.connsMu.Unlock()
 }
 
@@ -580,7 +573,7 @@ func (s *Session) unregister(id ConnID) {
 	s.connsMu.Unlock()
 }
 
-func (s *Session) lookup(id ConnID) *Conn {
+func (s *Session) lookup(id ConnID) connStream {
 	s.connsMu.Lock()
 	c := s.conns[id]
 	s.connsMu.Unlock()
@@ -594,7 +587,7 @@ func (s *Session) OpenUDP(addr Addr) (*UDPConn, error) {
 		return nil, ErrSessionClosed
 	}
 	var id ConnID
-	if _, err := readRand(id[:]); err != nil {
+	if _, err := rand.Read(id[:]); err != nil {
 		return nil, err
 	}
 	c := newUDPConn(id, s, addr)
@@ -621,44 +614,29 @@ func (s *Session) OpenUDP(addr Addr) (*UDPConn, error) {
 }
 
 func (s *Session) registerUDP(c *UDPConn) {
-	s.udpMu.Lock()
-	s.udpConns[c.id] = c
-	s.udpMu.Unlock()
+	s.register(c)
 }
 
 func (s *Session) unregisterUDP(id ConnID) {
-	s.udpMu.Lock()
-	delete(s.udpConns, id)
-	s.udpMu.Unlock()
+	s.unregister(id)
 }
 
 func (s *Session) lookupUDP(id ConnID) *UDPConn {
-	s.udpMu.Lock()
-	c := s.udpConns[id]
-	s.udpMu.Unlock()
-	return c
+	if c, ok := s.lookup(id).(*UDPConn); ok {
+		return c
+	}
+	return nil
 }
 
 func (s *Session) closeAllConns() {
 	s.connsMu.Lock()
-	conns := make([]*Conn, 0, len(s.conns))
+	conns := make([]connStream, 0, len(s.conns))
 	for _, c := range s.conns {
 		conns = append(conns, c)
 	}
-	s.conns = make(map[ConnID]*Conn)
+	s.conns = make(map[ConnID]connStream)
 	s.connsMu.Unlock()
 	for _, c := range conns {
-		c.markClosed(ErrSessionClosed)
-	}
-
-	s.udpMu.Lock()
-	udps := make([]*UDPConn, 0, len(s.udpConns))
-	for _, c := range s.udpConns {
-		udps = append(udps, c)
-	}
-	s.udpConns = make(map[ConnID]*UDPConn)
-	s.udpMu.Unlock()
-	for _, c := range udps {
 		c.markClosed(ErrSessionClosed)
 	}
 }
@@ -674,11 +652,3 @@ func maxAddrLen(a Addr) int {
 	}
 	return 0
 }
-
-// readRand fills b with random bytes (factored so tests can swap it).
-var readRand = func(b []byte) (int, error) {
-	return randReader.Read(b)
-}
-
-// randReader is set in conn_random.go (crypto/rand). Kept as a var for tests.
-var randReader io.Reader = cryptoRandReader{}

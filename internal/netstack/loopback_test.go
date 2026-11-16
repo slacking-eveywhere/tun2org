@@ -9,7 +9,6 @@ import (
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
@@ -99,9 +98,6 @@ func (h *captureHandler) HandleTCP(c TCPConn) {
 }
 
 func (h *captureHandler) HandleUDP(UDPConn) {}
-
-// header.MakeWithData is unused directly here; keep the import referenced.
-var _ = header.IPv6ProtocolNumber
 
 // TestNetstackLoopbackForwarder exercises the real TUN-like data path end to
 // end: a gonet TCP client's SYN goes out the outbound loop, is read back by the

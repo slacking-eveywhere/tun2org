@@ -9,9 +9,9 @@ package dns
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -119,25 +119,21 @@ func (s *ListenServer) ListenAndServe(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.forward(ctx, pc, raddr, query, target)
+			s.forward(pc, raddr, query, target)
 		}()
 	}
 }
 
 // forward sends query to the remote resolver via the mux and writes the reply
 // back to the client.
-func (s *ListenServer) forward(ctx context.Context, pc net.PacketConn, client net.Addr, query []byte, target mux.Addr) {
+func (s *ListenServer) forward(pc net.PacketConn, client net.Addr, query []byte, target mux.Addr) {
 	uc, err := s.fwd.OpenUDP(target)
 	if err != nil {
 		s.log.Printf("dns: open upstream: %v", err)
 		return
 	}
 	defer uc.Close()
-	if dl, ok := ctx.Deadline(); ok {
-		uc.SetReadDeadline(dl)
-	} else {
-		uc.SetReadDeadline(time.Now().Add(s.timeout))
-	}
+	uc.SetReadDeadline(time.Now().Add(s.timeout))
 	if _, err := uc.WriteTo(query, nil); err != nil {
 		s.log.Printf("dns: write upstream: %v", err)
 		return
@@ -183,14 +179,9 @@ func splitHostPort(s string, def int) (string, int) {
 	if err != nil {
 		return s, def
 	}
-	port := 0
-	for _, c := range []byte(p) {
-		if c < '0' || c > '9' {
-			return h, def
-		}
-		port = port*10 + int(c-'0')
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		return h, def
 	}
 	return h, port
 }
-
-var _ = errors.New

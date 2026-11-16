@@ -10,32 +10,30 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func withUDPHandler(s *stack.Stack, _ tcpip.NICID, h Handler) Option {
-	return func(s *stack.Stack) error {
-		fwd := udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
-			var (
-				wq waiter.Queue
-				id = r.ID()
-			)
-			ep, err := r.CreateEndpoint(&wq)
-			if err != nil {
-				return
-			}
-			conn := &udpConn{
-				UDPConn: gonet.NewUDPConn(&wq, ep),
-				id: TransportEndpointID{
-					LocalAddress:  id.LocalAddress,
-					LocalPort:     id.LocalPort,
-					RemoteAddress: id.RemoteAddress,
-					RemotePort:    id.RemotePort,
-				},
-			}
-			// Off the dispatch path, same as the TCP forwarder (option.go).
-			go h.HandleUDP(conn)
-		})
-		s.SetTransportProtocolHandler(udp.ProtocolNumber, fwd.HandlePacket)
-		return nil
-	}
+// udpForwarder accepts every inbound UDP flow from the stack and hands it to
+// the handler.
+func udpForwarder(s *stack.Stack, h Handler) *udp.Forwarder {
+	return udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
+		var (
+			wq waiter.Queue
+			id = r.ID()
+		)
+		ep, err := r.CreateEndpoint(&wq)
+		if err != nil {
+			return
+		}
+		conn := &udpConn{
+			UDPConn: gonet.NewUDPConn(&wq, ep),
+			id: TransportEndpointID{
+				LocalAddress:  id.LocalAddress,
+				LocalPort:     id.LocalPort,
+				RemoteAddress: id.RemoteAddress,
+				RemotePort:    id.RemotePort,
+			},
+		}
+		// Off the dispatch path, same as the TCP forwarder (tcp.go).
+		go h.HandleUDP(conn)
+	})
 }
 
 // udpConn implements UDPConn.

@@ -10,8 +10,8 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
-	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -37,9 +37,8 @@ func (discardLogger) Printf(string, ...any) {}
 
 // Options configures the Tunnel.
 type Options struct {
-	Dialer     Dialer
-	Log        Logger
-	UDPTimeout time.Duration
+	Dialer Dialer
+	Log    Logger
 	// DNSHijack, when true, redirects UDP/53 on the TUN to DNSRemote instead
 	// of the original resolver IP.
 	DNSHijack bool
@@ -56,8 +55,6 @@ type Tunnel struct {
 	mu     sync.Mutex
 	stack  *stack.Stack
 	closed bool
-
-	udpTimeout time.Duration
 }
 
 var _ netstack.Handler = (*Tunnel)(nil)
@@ -67,15 +64,10 @@ func New(opts Options) *Tunnel {
 	if opts.Log == nil {
 		opts.Log = discardLogger{}
 	}
-	t := &Tunnel{
-		opts:       opts,
-		log:        opts.Log,
-		udpTimeout: opts.UDPTimeout,
+	return &Tunnel{
+		opts: opts,
+		log:  opts.Log,
 	}
-	if t.udpTimeout == 0 {
-		t.udpTimeout = 30 * time.Second
-	}
-	return t
 }
 
 // dnsTarget decides which mux.Addr a UDP datagram to (dstIP:dstPort) should be
@@ -121,10 +113,6 @@ func (t *Tunnel) HandleTCP(c netstack.TCPConn) {
 	pipeStream(remote, c)
 }
 
-// HandleUDP pipes a netstack UDP conn through a UDP association to the agent.
-// DNS hijack (Options.DNSHijack + dst port 53) rewrites the target to
-// Options.DNSRemote so DNS queries reach the forward server's resolver.
-//
 // pipeStream copies bytes both ways for TCP conns until one side closes.
 func pipeStream(remote io.ReadWriter, local io.ReadWriteCloser) {
 	var wg sync.WaitGroup
@@ -147,7 +135,9 @@ func pipeStream(remote io.ReadWriter, local io.ReadWriteCloser) {
 	_ = local.Close()
 }
 
-// (HandleUDP body below uses native UDP_OPEN/UDP_DATA via the agent.)
+// HandleUDP pipes a netstack UDP conn through a UDP association to the agent.
+// DNS hijack (Options.DNSHijack + dst port 53) rewrites the target to
+// Options.DNSRemote so DNS queries reach the forward server's resolver.
 func (t *Tunnel) HandleUDP(c netstack.UDPConn) {
 	defer c.Close()
 	id := c.ID()
@@ -164,12 +154,12 @@ func (t *Tunnel) HandleUDP(c netstack.UDPConn) {
 		return
 	}
 	defer remote.Close()
-	pipePacket(c, remote, t.udpTimeout)
+	pipePacket(c, remote)
 }
 
 // pipePacket relays datagrams between a netstack UDPConn and a mux UDPConn
-// until either side closes or the idle timeout elapses.
-func pipePacket(local netstack.UDPConn, remote *mux.UDPConn, timeout time.Duration) {
+// until either side closes.
+func pipePacket(local netstack.UDPConn, remote *mux.UDPConn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	// local -> remote
@@ -189,14 +179,15 @@ func pipePacket(local netstack.UDPConn, remote *mux.UDPConn, timeout time.Durati
 	// remote -> local
 	go func() {
 		defer wg.Done()
+		id := local.ID()
+		dstAddr := netstack.Addr{IP: id.RemoteAddress, Port: id.RemotePort}
 		buf := make([]byte, 64*1024)
 		for {
 			n, _, err := remote.ReadFrom(buf)
 			if err != nil {
 				return
 			}
-			id := local.ID()
-			if _, err := local.WriteTo(buf[:n], netstack.Addr{IP: id.RemoteAddress, Port: id.RemotePort}); err != nil {
+			if _, err := local.WriteTo(buf[:n], dstAddr); err != nil {
 				return
 			}
 		}
@@ -204,18 +195,16 @@ func pipePacket(local netstack.UDPConn, remote *mux.UDPConn, timeout time.Durati
 	wg.Wait()
 }
 
-// splitHostPortDefault splits host:port, defaulting port if absent.
+// splitHostPortDefault splits host:port, defaulting the port if absent or
+// non-numeric.
 func splitHostPortDefault(s string, def int) (string, int) {
 	h, p, err := net.SplitHostPort(s)
 	if err != nil {
 		return s, def
 	}
-	port := 0
-	for _, c := range []byte(p) {
-		if c < '0' || c > '9' {
-			return h, def
-		}
-		port = port*10 + int(c-'0')
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		return h, def
 	}
 	return h, port
 }

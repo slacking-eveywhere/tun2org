@@ -123,8 +123,7 @@ func newE2E(t *testing.T, tcpTarget, udpTarget string) *e2e {
 	}()
 
 	tnl := tunnel.New(tunnel.Options{
-		Dialer:     &muxDialer{sess: localSess},
-		UDPTimeout: 30 * time.Second,
+		Dialer: &muxDialer{sess: localSess},
 	})
 
 	rw := &loopRW{ready: make(chan struct{})}

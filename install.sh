@@ -21,9 +21,8 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 build() {
     here="$(cd "$(dirname "$0")" && pwd)"
-    if [ ! -f "$here/go.mod" ] || [ "$(basename "$here")" != "ntun-ng" ]; then
-        err "run this from the ntun-ng directory (got: $here)"
-        err "expected ntun-ng/go.mod"
+    if [ ! -f "$here/go.mod" ]; then
+        err "run this from the repo root (no go.mod found at: $here)"
         exit 1
     fi
     if ! have go; then
@@ -50,9 +49,8 @@ build() {
 
 install() {
     here="$(cd "$(dirname "$0")" && pwd)"
-    if [ ! -f "$here/go.mod" ] || [ "$(basename "$here")" != "ntun-ng" ]; then
-        err "run this from the ntun-ng directory (got: $here)"
-        err "expected ntun-ng/go.mod"
+    if [ ! -f "$here/go.mod" ]; then
+        err "run this from the repo root (no go.mod found at: $here)"
         exit 1
     fi
 

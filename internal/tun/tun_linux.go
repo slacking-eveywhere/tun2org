@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"golang.org/x/sys/unix"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 	wg "golang.zx2c4.com/wireguard/tun"
 )
 
@@ -88,7 +88,7 @@ var _ wg.Device = (*rawTun)(nil)
 
 func (t *rawTun) Name() (string, error) { return t.name, nil }
 func (t *rawTun) MTU() (int, error)     { return t.mtu, nil }
-func (t *rawTun) BatchSize() int         { return 1 }
+func (t *rawTun) BatchSize() int        { return 1 }
 
 // Events is required by the wireguard Device interface; ntun never listens
 // for device events, so a nil channel (receive blocks forever) is fine.

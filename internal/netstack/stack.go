@@ -1,9 +1,14 @@
+// Package netstack wires a TUN device (io.ReadWriter) to a gVisor userspace
+// TCP/IP stack and dispatches accepted TCP/UDP connections to a handler.
+//
+// This is a clean reimplementation of the ~200 lines of glue that tun2socks
+// (GPL-3.0) places on top of gvisor (Apache-2.0). No tun2socks code is
+// vendored; the new binary stays MIT.
 package netstack
 
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -33,9 +38,9 @@ type TCPConn interface {
 
 // UDPConn is an accepted UDP connection from the netstack.
 type UDPConn interface {
-	io.Closer
 	ReadFrom(p []byte) (n int, addr Addr, err error)
 	WriteTo(p []byte, addr Addr) (n int, err error)
+	Close() error
 	ID() TransportEndpointID
 }
 
@@ -57,7 +62,6 @@ type Addr struct {
 type Config struct {
 	Link    *LinkEndpoint
 	Handler Handler
-	Options []Option
 }
 
 // CreateStack builds a gVisor stack with ipv4+ipv6, tcp+udp+icmp, promiscuous
@@ -69,9 +73,6 @@ func CreateStack(cfg Config) (*stack.Stack, error) {
 	if cfg.Handler == nil {
 		return nil, errors.New("netstack: handler is nil")
 	}
-
-	opts := []Option{WithDefault()}
-	opts = append(opts, cfg.Options...)
 
 	s := stack.New(stack.Options{
 		NetworkProtocols: []stack.NetworkProtocolFactory{
@@ -87,64 +88,79 @@ func CreateStack(cfg Config) (*stack.Stack, error) {
 	})
 
 	nicID := s.NextNICID()
-
-	allOpts := append([]Option{}, opts...)
-	allOpts = append(allOpts,
-		withTCPHandler(s, nicID, cfg.Handler),
-		withUDPHandler(s, nicID, cfg.Handler),
-		withCreatingNIC(nicID, cfg.Link),
-		withPromiscuousMode(nicID),
-		withSpoofing(nicID),
-		withRouteTable(nicID),
-	)
-
-	for _, opt := range allOpts {
-		if err := opt(s); err != nil {
-			s.Close()
-			return nil, err
-		}
+	if err := s.CreateNICWithOptions(nicID, cfg.Link, stack.NICOptions{}); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("netstack: create NIC: %s", err)
 	}
+	// Promiscuous + spoofing: deliver packets for any destination address
+	// (remote services live on routed networks, not on the TUN subnet).
+	if err := s.SetPromiscuousMode(nicID, true); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("netstack: promiscuous: %s", err)
+	}
+	if err := s.SetSpoofing(nicID, true); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("netstack: spoofing: %s", err)
+	}
+	s.SetRouteTable([]tcpip.Route{
+		{Destination: header.IPv4EmptySubnet, NIC: nicID},
+		{Destination: header.IPv6EmptySubnet, NIC: nicID},
+	})
+
+	if err := applyStackDefaults(s); err != nil {
+		s.Close()
+		return nil, err
+	}
+
+	s.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder(s, cfg.Handler).HandlePacket)
+	s.SetTransportProtocolHandler(udp.ProtocolNumber, udpForwarder(s, cfg.Handler).HandlePacket)
 	return s, nil
 }
 
-const (
-	nicPromiscuousModeEnabled  = true
-	nicSpoofingEnabled       = true
-)
-
-func withCreatingNIC(nicID tcpip.NICID, ep stack.LinkEndpoint) Option {
-	return func(s *stack.Stack) error {
-		if err := s.CreateNICWithOptions(nicID, ep, stack.NICOptions{}); err != nil {
-			return fmt.Errorf("netstack: create NIC: %s", err)
-		}
-		return nil
+// applyStackDefaults sets the sane TCP/ICMP defaults tun2socks used.
+func applyStackDefaults(s *stack.Stack) error {
+	ttl := tcpip.DefaultTTLOption(64)
+	if err := toErr(s.SetNetworkProtocolOption(ipv4.ProtocolNumber, &ttl)); err != nil {
+		return err
 	}
+	if err := toErr(s.SetNetworkProtocolOption(ipv6.ProtocolNumber, &ttl)); err != nil {
+		return err
+	}
+	if err := toErr(s.SetForwardingDefaultAndAllNICs(ipv4.ProtocolNumber, true)); err != nil {
+		return err
+	}
+	if err := toErr(s.SetForwardingDefaultAndAllNICs(ipv6.ProtocolNumber, true)); err != nil {
+		return err
+	}
+	s.SetICMPBurst(50)
+	cc := tcpip.CongestionControlOption("reno")
+	if err := toErr(s.SetTransportProtocolOption(tcp.ProtocolNumber, &cc)); err != nil {
+		return err
+	}
+	delay := tcpip.TCPDelayEnabled(false)
+	if err := toErr(s.SetTransportProtocolOption(tcp.ProtocolNumber, &delay)); err != nil {
+		return err
+	}
+	moderate := tcpip.TCPModerateReceiveBufferOption(false)
+	if err := toErr(s.SetTransportProtocolOption(tcp.ProtocolNumber, &moderate)); err != nil {
+		return err
+	}
+	sack := tcpip.TCPSACKEnabled(true)
+	if err := toErr(s.SetTransportProtocolOption(tcp.ProtocolNumber, &sack)); err != nil {
+		return err
+	}
+	recovery := tcpip.TCPRACKLossDetection
+	if err := toErr(s.SetTransportProtocolOption(tcp.ProtocolNumber, &recovery)); err != nil {
+		return err
+	}
+	return nil
 }
 
-func withPromiscuousMode(nicID tcpip.NICID) Option {
-	return func(s *stack.Stack) error {
-		if err := s.SetPromiscuousMode(nicID, nicPromiscuousModeEnabled); err != nil {
-			return fmt.Errorf("netstack: promiscuous: %s", err)
-		}
+// toErr converts a tcpip.Error (which does not implement the standard error
+// interface since gVisor dropped Error() string) into a Go error.
+func toErr(e tcpip.Error) error {
+	if e == nil {
 		return nil
 	}
-}
-
-func withSpoofing(nicID tcpip.NICID) Option {
-	return func(s *stack.Stack) error {
-		if err := s.SetSpoofing(nicID, nicSpoofingEnabled); err != nil {
-			return fmt.Errorf("netstack: spoofing: %s", err)
-		}
-		return nil
-	}
-}
-
-func withRouteTable(nicID tcpip.NICID) Option {
-	return func(s *stack.Stack) error {
-		s.SetRouteTable([]tcpip.Route{
-			{Destination: header.IPv4EmptySubnet, NIC: nicID},
-			{Destination: header.IPv6EmptySubnet, NIC: nicID},
-		})
-		return nil
-	}
+	return fmt.Errorf("%s", e)
 }

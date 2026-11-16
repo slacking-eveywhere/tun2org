@@ -62,7 +62,6 @@ func hostPort(t *testing.T, s string) (string, uint16) {
 // and runs a real agent on the far end, so the relay gets a live mux Session
 // without any SSH. Sessions can be killed individually via killSession.
 type fakeDialer struct {
-	echoAddr string
 	failN    int32 // number of consecutive dial failures before success
 	calls    atomic.Int32
 	sessions atomic.Int32
@@ -110,7 +109,7 @@ func TestRelayOpenThroughAgent(t *testing.T) {
 	echoAddr, echoStop := startEcho(t)
 	defer echoStop()
 
-	f := &fakeDialer{echoAddr: echoAddr}
+	f := &fakeDialer{}
 	r := relay.New(relay.Options{
 		Dialer:       f,
 		PingEvery:    0,
@@ -151,7 +150,7 @@ func TestRelayReconnectAfterFailures(t *testing.T) {
 	echoAddr, echoStop := startEcho(t)
 	defer echoStop()
 
-	f := &fakeDialer{echoAddr: echoAddr, failN: 3}
+	f := &fakeDialer{failN: 3}
 	r := relay.New(relay.Options{
 		Dialer:       f,
 		PingEvery:    0,
@@ -182,7 +181,7 @@ func TestRelayReconnectAfterSessionDeath(t *testing.T) {
 	echoAddr, echoStop := startEcho(t)
 	defer echoStop()
 
-	f := &fakeDialer{echoAddr: echoAddr}
+	f := &fakeDialer{}
 	r := relay.New(relay.Options{
 		Dialer:       f,
 		PingEvery:    0,
@@ -241,7 +240,7 @@ func TestRelayRebindDropsSession(t *testing.T) {
 	echoAddr, echoStop := startEcho(t)
 	defer echoStop()
 
-	f := &fakeDialer{echoAddr: echoAddr}
+	f := &fakeDialer{}
 	r := relay.New(relay.Options{
 		Dialer:       f,
 		PingEvery:    0,

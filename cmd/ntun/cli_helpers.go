@@ -21,19 +21,18 @@ func configInit(path string) int {
 		return 2
 	}
 	example := config.Config{
-		Username:       "your-ipa-login",
-		ForwardServer:  "bla.bli.blou",
-		Mode:           config.ModeBastion,
-		Bastion:        "relais-ssh.bli.blou",
-		BastionPort:    22,
-		Auth:           config.AuthPassword,
-		Routes:         []string{"10.120.1.10/32", "10.135.0.0/16"},
+		Username:        "your-ipa-login",
+		ForwardServer:   "bla.bli.blou",
+		Mode:            config.ModeBastion,
+		Bastion:         "relais-ssh.bli.blou",
+		BastionPort:     22,
+		Auth:            config.AuthPassword,
+		Routes:          []string{"10.120.1.10/32", "10.135.0.0/16"},
 		TunDevice:       "tun0",
 		TunNetwork:      "198.18.0.1/15",
 		PingEvery:       30 * time.Second,
 		ReconnectMin:    1 * time.Second,
 		ReconnectMax:    30 * time.Second,
-		LogLevel:        "info",
 		PostStartScript: "",
 		PostStopScript:  "",
 	}

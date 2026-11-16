@@ -117,10 +117,3 @@ func (r *RebindTracker) Set(name string) bool {
 	r.cur = name
 	return true
 }
-
-// Get returns the last recorded interface.
-func (r *RebindTracker) Get() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.cur
-}

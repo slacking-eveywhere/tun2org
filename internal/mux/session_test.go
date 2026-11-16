@@ -184,9 +184,6 @@ func TestClosePropagates(t *testing.T) {
 }
 
 func TestPingPong(t *testing.T) {
-	_, echoStop := startEcho(t)
-	defer echoStop()
-
 	// Build a pair with pings enabled on the local side.
 	localEnd, agentEnd := pipePair()
 	agentSess := NewSession(agentEnd, SessionConfig{

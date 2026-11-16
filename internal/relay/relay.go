@@ -16,7 +16,6 @@ package relay
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"math/rand/v2"
 	"sync"
@@ -53,9 +52,6 @@ type Options struct {
 	ReconnectMin time.Duration
 	ReconnectMax time.Duration
 	Log          Logger
-	// OnSession is called (possibly nil) each time a new session becomes live.
-	// Used by phase 3 to rebind the netstack dialer.
-	OnSession func(*mux.Session)
 }
 
 // Relay maintains a live *mux.Session over a reconnecting SSH transport and
@@ -124,10 +120,6 @@ func (r *Relay) Run(ctx context.Context) error {
 			PingEvery:  r.opts.PingEvery,
 		})
 		r.publishSession(sess)
-
-		if r.opts.OnSession != nil {
-			r.opts.OnSession(sess)
-		}
 
 		go sess.Serve()
 		// Wait for the session to end, a rebind request, or shutdown.
@@ -266,13 +258,4 @@ func (r *Relay) backoff(ctx context.Context, attempt int) {
 	case <-ctx.Done():
 	case <-t.C:
 	}
-}
-
-// String returns a debug description.
-func (r *Relay) String() string {
-	s := r.cur.Load()
-	if s == nil {
-		return fmt.Sprintf("relay{no session}")
-	}
-	return fmt.Sprintf("relay{live}")
 }

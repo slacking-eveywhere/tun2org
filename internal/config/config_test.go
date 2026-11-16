@@ -115,7 +115,7 @@ func TestLoadBadJSON(t *testing.T) {
 func TestLoadDuration(t *testing.T) {
 	p := writeTemp(t, "config.json", `{
 		"username":"u","forward_server":"h",
-		"ping_every":"15s","udp_timeout":"10s"
+		"ping_every":"15s"
 	}`)
 	c, err := config.Load(p)
 	if err != nil {
@@ -124,23 +124,20 @@ func TestLoadDuration(t *testing.T) {
 	if c.PingEvery != 15*time.Second {
 		t.Errorf("PingEvery = %v", c.PingEvery)
 	}
-	if c.UDPTimeout != 10*time.Second {
-		t.Errorf("UDPTimeout = %v", c.UDPTimeout)
-	}
 }
 
 func TestLoadDurationMarshalRoundTrip(t *testing.T) {
 	p := writeTemp(t, "config.json", `{
 		"username":"u","forward_server":"h",
-		"ping_every":"15s","udp_timeout":"10s","reconnect_min":"500ms","reconnect_max":"5s"
+		"ping_every":"15s","reconnect_min":"500ms","reconnect_max":"5s"
 	}`)
 	c, err := config.Load(p)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.PingEvery != 15*time.Second || c.UDPTimeout != 10*time.Second ||
+	if c.PingEvery != 15*time.Second ||
 		c.ReconnectMin != 500*time.Millisecond || c.ReconnectMax != 5*time.Second {
-		t.Fatalf("durations = %v %v %v %v", c.PingEvery, c.UDPTimeout, c.ReconnectMin, c.ReconnectMax)
+		t.Fatalf("durations = %v %v %v", c.PingEvery, c.ReconnectMin, c.ReconnectMax)
 	}
 	// Marshal back should emit string durations, not raw nanoseconds.
 	data, err := json.Marshal(c)
@@ -148,7 +145,7 @@ func TestLoadDurationMarshalRoundTrip(t *testing.T) {
 		t.Fatalf("Marshal: %v", err)
 	}
 	s := string(data)
-	for _, want := range []string{"\"15s\"", "\"10s\"", "\"500ms\"", "\"5s\""} {
+	for _, want := range []string{"\"15s\"", "\"500ms\"", "\"5s\""} {
 		if !strings.Contains(s, want) {
 			t.Errorf("marshal output missing %s: %s", want, s)
 		}
@@ -158,7 +155,7 @@ func TestLoadDurationMarshalRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load 2: %v", err)
 	}
-	if c2.PingEvery != c.PingEvery || c2.UDPTimeout != c.UDPTimeout {
+	if c2.PingEvery != c.PingEvery || c2.ReconnectMin != c.ReconnectMin || c2.ReconnectMax != c.ReconnectMax {
 		t.Fatalf("round-trip mismatch")
 	}
 }
