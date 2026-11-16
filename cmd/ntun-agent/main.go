@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"ntun-ng/internal/agent"
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/version"
 )
 
@@ -25,16 +26,10 @@ func main() {
 	}
 
 	cfg := agent.Config{
-		Log: stdlog{},
+		Log: logx.ToWriter(os.Stderr),
 	}
 	if err := agent.RunStdio(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", version.AgentName, err)
 		os.Exit(1)
 	}
-}
-
-type stdlog struct{}
-
-func (stdlog) Printf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }

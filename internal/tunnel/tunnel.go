@@ -16,6 +16,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/mux"
 	"ntun-ng/internal/netstack"
 )
@@ -26,19 +27,10 @@ type Dialer interface {
 	OpenUDP(addr mux.Addr) (*mux.UDPConn, error)
 }
 
-// Logger is the minimal logging surface.
-type Logger interface {
-	Printf(format string, args ...any)
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Printf(string, ...any) {}
-
 // Options configures the Tunnel.
 type Options struct {
 	Dialer Dialer
-	Log    Logger
+	Log    logx.Logger
 	// DNSHijack, when true, redirects UDP/53 on the TUN to DNSRemote instead
 	// of the original resolver IP.
 	DNSHijack bool
@@ -50,7 +42,7 @@ type Options struct {
 // Tunnel implements netstack.Handler.
 type Tunnel struct {
 	opts Options
-	log  Logger
+	log  logx.Logger
 
 	mu     sync.Mutex
 	stack  *stack.Stack
@@ -62,7 +54,7 @@ var _ netstack.Handler = (*Tunnel)(nil)
 // New returns a Tunnel. CreateStack attaches it as the transport handler.
 func New(opts Options) *Tunnel {
 	if opts.Log == nil {
-		opts.Log = discardLogger{}
+		opts.Log = logx.Discard
 	}
 	return &Tunnel{
 		opts: opts,
@@ -100,13 +92,13 @@ func (t *Tunnel) HandleTCP(c netstack.TCPConn) {
 	// address (the TUN's addr); the source is the app's ephemeral port.
 	dst := tcpipAddrToMux(id.LocalAddress, id.LocalPort)
 	if dst.Type == 0 {
-		t.log.Printf("tunnel: tcp: undialable destination %s", id.LocalAddress)
+		t.log("tunnel: tcp: undialable destination %s", id.LocalAddress)
 		return
 	}
 
 	remote, err := t.opts.Dialer.Open(dst)
 	if err != nil {
-		t.log.Printf("tunnel: tcp: open %s: %v", dst.String(), err)
+		t.log("tunnel: tcp: open %s: %v", dst.String(), err)
 		return
 	}
 	defer remote.Close()
@@ -144,13 +136,13 @@ func (t *Tunnel) HandleUDP(c netstack.UDPConn) {
 
 	dst := tcpipAddrToMux(id.LocalAddress, id.LocalPort)
 	if dst.Type == 0 {
-		t.log.Printf("tunnel: udp: undialable destination %s", id.LocalAddress)
+		t.log("tunnel: udp: undialable destination %s", id.LocalAddress)
 		return
 	}
 	target := t.dnsTarget(dst)
 	remote, err := t.opts.Dialer.OpenUDP(target)
 	if err != nil {
-		t.log.Printf("tunnel: udp: open %s: %v", target.String(), err)
+		t.log("tunnel: udp: open %s: %v", target.String(), err)
 		return
 	}
 	defer remote.Close()

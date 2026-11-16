@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/mux"
 )
 
@@ -24,22 +25,13 @@ type Forwarder interface {
 	OpenUDP(addr mux.Addr) (*mux.UDPConn, error)
 }
 
-// Logger is the minimal logging surface.
-type Logger interface {
-	Printf(format string, args ...any)
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Printf(string, ...any) {}
-
 // ListenServer answers DNS queries on a local UDP address by forwarding them
 // over the mux to a remote resolver.
 type ListenServer struct {
 	listen  string
 	remote  string // host:port of the remote resolver
 	fwd     Forwarder
-	log     Logger
+	log     logx.Logger
 	timeout time.Duration
 
 	mu       sync.Mutex
@@ -50,9 +42,9 @@ type ListenServer struct {
 
 // NewListenServer creates a server bound to listen that forwards to remote
 // (host:port) via fwd. timeout is the per-query upstream deadline (0 = 5s).
-func NewListenServer(listen, remote string, fwd Forwarder, timeout time.Duration, log Logger) *ListenServer {
+func NewListenServer(listen, remote string, fwd Forwarder, timeout time.Duration, log logx.Logger) *ListenServer {
 	if log == nil {
-		log = discardLogger{}
+		log = logx.Discard
 	}
 	if timeout == 0 {
 		timeout = 5 * time.Second
@@ -96,7 +88,7 @@ func (s *ListenServer) ListenAndServe(ctx context.Context) error {
 	remoteHost, remotePort := splitHostPort(s.remote, 53)
 	target := mux.FromHostPort(remoteHost, uint16(remotePort))
 
-	s.log.Printf("dns: serving %s -> %s", s.listen, s.remote)
+	s.log("dns: serving %s -> %s", s.listen, s.remote)
 
 	var wg sync.WaitGroup
 	for {
@@ -129,24 +121,24 @@ func (s *ListenServer) ListenAndServe(ctx context.Context) error {
 func (s *ListenServer) forward(pc net.PacketConn, client net.Addr, query []byte, target mux.Addr) {
 	uc, err := s.fwd.OpenUDP(target)
 	if err != nil {
-		s.log.Printf("dns: open upstream: %v", err)
+		s.log("dns: open upstream: %v", err)
 		return
 	}
 	defer uc.Close()
 	uc.SetReadDeadline(time.Now().Add(s.timeout))
 	if _, err := uc.WriteTo(query, nil); err != nil {
-		s.log.Printf("dns: write upstream: %v", err)
+		s.log("dns: write upstream: %v", err)
 		return
 	}
 	reply := make([]byte, 1500)
 	uc.SetReadDeadline(time.Now().Add(s.timeout))
 	n, _, err := uc.ReadFrom(reply)
 	if err != nil {
-		s.log.Printf("dns: read upstream: %v", err)
+		s.log("dns: read upstream: %v", err)
 		return
 	}
 	if _, err := pc.WriteTo(reply[:n], client); err != nil {
-		s.log.Printf("dns: write client: %v", err)
+		s.log("dns: write client: %v", err)
 	}
 }
 

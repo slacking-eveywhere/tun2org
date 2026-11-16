@@ -15,6 +15,7 @@ import (
 	"os"
 	"time"
 
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/mux"
 )
 
@@ -26,7 +27,7 @@ type Config struct {
 	UDPDialer Dialer
 
 	// Log receives human-readable status lines. nil = discard.
-	Log Logger
+	Log logx.Logger
 
 	// PingEvery is the mux keepalive interval. 0 = 30s default.
 	PingEvery time.Duration
@@ -37,20 +38,11 @@ type Dialer interface {
 	Dial(network, addr string) (net.Conn, error)
 }
 
-// Logger is the minimal logging interface used by the agent.
-type Logger interface {
-	Printf(format string, args ...any)
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Printf(string, ...any) {}
-
-func (c *Config) logger() Logger {
+func (c *Config) logger() logx.Logger {
 	if c.Log != nil {
 		return c.Log
 	}
-	return discardLogger{}
+	return logx.Discard
 }
 
 func (c *Config) udpDialer() Dialer {
@@ -83,7 +75,7 @@ func Run(rwc io.ReadWriteCloser, cfg Config) error {
 		} else if addr.Type == mux.AddrIPv4 {
 			network = "tcp4"
 		}
-		log.Printf("agent: dial %s %s", network, addr.String())
+		log("agent: dial %s %s", network, addr.String())
 		return cfg.dialer().Dial(network, addr.String())
 	}
 	acceptUDP := func(addr mux.Addr) (net.Conn, error) {
@@ -93,7 +85,7 @@ func Run(rwc io.ReadWriteCloser, cfg Config) error {
 		} else if addr.Type == mux.AddrIPv4 {
 			network = "udp4"
 		}
-		log.Printf("agent: dial %s %s", network, addr.String())
+		log("agent: dial %s %s", network, addr.String())
 		return cfg.udpDialer().Dial(network, addr.String())
 	}
 

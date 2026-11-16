@@ -14,6 +14,7 @@ import (
 
 	"ntun-ng/internal/app"
 	"ntun-ng/internal/config"
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/version"
 )
 
@@ -112,7 +113,7 @@ func runUp(args []string) int {
 
 	fmt.Fprintf(os.Stderr, "ntun: connecting to %s as %s (%s/%s)\n",
 		cfg.SSHHostPort(), cfg.SSHUser(), cfg.Mode, cfg.Auth)
-	if err := app.Run(ctx, cfg, stdlog{}); err != nil && !errors.Is(err, context.Canceled) {
+	if err := app.Run(ctx, cfg, logx.ToWriter(os.Stderr)); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "ntun: %v\n", err)
 		return 1
 	}
@@ -161,13 +162,6 @@ func runConfig(args []string) int {
 	}
 }
 
-func stdlogFn(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-type stdlog struct{}
-
-func (stdlog) Printf(format string, args ...any) { stdlogFn(format, args...) }
 
 func readPassword(prompt string) (string, error) {
 	fmt.Fprint(os.Stderr, prompt)

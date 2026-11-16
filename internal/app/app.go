@@ -12,6 +12,7 @@ import (
 
 	"ntun-ng/internal/config"
 	"ntun-ng/internal/dns"
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/mux"
 	"ntun-ng/internal/netstack"
 	"ntun-ng/internal/relay"
@@ -22,21 +23,12 @@ import (
 	"ntun-ng/internal/tunnel"
 )
 
-// Logger is the minimal logging surface.
-type Logger interface {
-	Printf(format string, args ...any)
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Printf(string, ...any) {}
-
 // Run brings the tunnel up and blocks until ctx is cancelled or a fatal error
 // occurs. It performs graceful teardown (routes, TUN, post-stop script) on
 // exit.
-func Run(ctx context.Context, cfg *config.Config, log Logger) error {
+func Run(ctx context.Context, cfg *config.Config, log logx.Logger) error {
 	if log == nil {
-		log = discardLogger{}
+		log = logx.Discard
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -47,7 +39,7 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		return fmt.Errorf("app: %w", err)
 	}
 	defer dev.Close()
-	log.Printf("app: tun %s up (mtu %d)", dev.Name(), dev.MTU())
+	log("app: tun %s up (mtu %d)", dev.Name(), dev.MTU())
 
 	if err := dev.Configure(cfg.TunNetwork, cfg.TunNetworkV6, cfg.MTU); err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -58,11 +50,11 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 	added, err := routes.Add(cfg.Routes)
 	if err != nil {
 		// Continue: partial routes still let some traffic through. Log + proceed.
-		log.Printf("app: route add: %v", err)
+		log("app: route add: %v", err)
 	}
 	defer func() { _ = routes.Remove() }()
 	for _, r := range added {
-		log.Printf("app: route %s via %s", r.CIDR, r.Device)
+		log("app: route %s via %s", r.CIDR, r.Device)
 	}
 
 	// 2b. State file for `ntun down` crash recovery.
@@ -78,20 +70,20 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		Routes:         routeCIDRs,
 		PostStopScript: cfg.PostStopScript,
 	}); err != nil {
-		log.Printf("app: state write: %v", err)
+		log("app: state write: %v", err)
 	}
 	defer state.Remove()
 
 	// 3. Post-start script.
 	if cfg.PostStartScript != "" {
 		if err := runScript(cfg.PostStartScript); err != nil {
-			log.Printf("app: post_start: %v", err)
+			log("app: post_start: %v", err)
 		}
 	}
 	defer func() {
 		if cfg.PostStopScript != "" {
 			if err := runScript(cfg.PostStopScript); err != nil {
-				log.Printf("app: post_stop: %v", err)
+				log("app: post_stop: %v", err)
 			}
 		}
 	}()
@@ -106,11 +98,11 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		PingEvery:    cfg.PingEvery,
 		ReconnectMin: cfg.ReconnectMin,
 		ReconnectMax: cfg.ReconnectMax,
-		Log:          logAdapter{log: log, prefix: "relay"},
+		Log:          logx.Prefix(log, "relay"),
 	})
 	tnl := tunnel.New(tunnel.Options{
 		Dialer:    &relayDialer{r: r},
-		Log:       logAdapter{log: log, prefix: "tunnel"},
+		Log:       logx.Prefix(log, "tunnel"),
 		DNSHijack: cfg.DNSHijack != nil && *cfg.DNSHijack,
 		DNSRemote: cfg.DNSRemote,
 	})
@@ -146,7 +138,7 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 	go func() {
 		link.Wait()
 		if ctx.Err() == nil {
-			log.Printf("app: netstack link loops exited unexpectedly — shutting the tunnel down")
+			log("app: netstack link loops exited unexpectedly — shutting the tunnel down")
 			cancel()
 		}
 	}()
@@ -165,7 +157,7 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 				return // explicit interface override; don't auto-rebind
 			}
 			if rebind.Set(iface) {
-				log.Printf("app: default interface changed to %s, rebinding", iface)
+				log("app: default interface changed to %s, rebinding", iface)
 				r.Rebind()
 			}
 		})
@@ -174,10 +166,10 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 	// 5c. Optional local DNS server (dns_listen) forwarding over the mux.
 	if cfg.DNSListen != "" && cfg.DNSRemote != "" {
 		srv := dns.NewListenServer(cfg.DNSListen, cfg.DNSRemote, &relayDialer{r: r}, 0,
-			logAdapter{log: log, prefix: "dns"})
+			logx.Prefix(log, "dns"))
 		go func() {
 			if err := srv.ListenAndServe(ctx); err != nil {
-				log.Printf("app: dns server: %v", err)
+				log("app: dns server: %v", err)
 			}
 		}()
 	}
@@ -190,7 +182,7 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 		relayErr = r.Run(ctx)
 	}()
 
-	log.Printf("app: tunnel up")
+	log("app: tunnel up")
 	select {
 	case <-ctx.Done():
 	case <-relayDone:
@@ -205,7 +197,7 @@ func Run(ctx context.Context, cfg *config.Config, log Logger) error {
 	case <-relayDone:
 	case <-time.After(2 * time.Second):
 	}
-	log.Printf("app: shutting down")
+	log("app: shutting down")
 	return nil
 }
 
@@ -225,13 +217,3 @@ type relayDialer struct {
 
 func (d *relayDialer) Open(a mux.Addr) (*mux.Conn, error)       { return d.r.Open(a) }
 func (d *relayDialer) OpenUDP(a mux.Addr) (*mux.UDPConn, error) { return d.r.OpenUDP(a) }
-
-// logAdapter prefixes log lines.
-type logAdapter struct {
-	log    Logger
-	prefix string
-}
-
-func (l logAdapter) Printf(format string, args ...any) {
-	l.log.Printf(l.prefix+": "+format, args...)
-}

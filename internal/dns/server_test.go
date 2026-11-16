@@ -73,7 +73,7 @@ func (*timeoutErr) Error() string { return "timed out" }
 // returns the reply to the client.
 func TestListenServerForwardQuery(t *testing.T) {
 	remote := startUDPDNSEcho(t)
-	srv := dns.NewListenServer("127.0.0.1:0", remote, fakeForwarder{}, 0, testLogger{t})
+	srv := dns.NewListenServer("127.0.0.1:0", remote, fakeForwarder{}, 0, testLogger(t))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -110,8 +110,9 @@ func TestListenServerForwardQuery(t *testing.T) {
 	wg.Wait()
 }
 
-type testLogger struct{ t *testing.T }
-
-func (l testLogger) Printf(format string, args ...any) {
-	l.t.Logf("dns: "+format, args...)
+// testLogger logs through t.Logf.
+func testLogger(t *testing.T) func(format string, args ...any) {
+	return func(format string, args ...any) {
+		t.Logf("dns: "+format, args...)
+	}
 }

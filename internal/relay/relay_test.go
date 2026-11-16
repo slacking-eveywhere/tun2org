@@ -115,7 +115,7 @@ func TestRelayOpenThroughAgent(t *testing.T) {
 		PingEvery:    0,
 		ReconnectMin: 10 * time.Millisecond,
 		ReconnectMax: 50 * time.Millisecond,
-		Log:          testLogger{t},
+		Log:          testLogger(t),
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,7 +156,7 @@ func TestRelayReconnectAfterFailures(t *testing.T) {
 		PingEvery:    0,
 		ReconnectMin: 5 * time.Millisecond,
 		ReconnectMax: 20 * time.Millisecond,
-		Log:          testLogger{t},
+		Log:          testLogger(t),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -187,7 +187,7 @@ func TestRelayReconnectAfterSessionDeath(t *testing.T) {
 		PingEvery:    0,
 		ReconnectMin: 10 * time.Millisecond,
 		ReconnectMax: 30 * time.Millisecond,
-		Log:          testLogger{t},
+		Log:          testLogger(t),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -246,7 +246,7 @@ func TestRelayRebindDropsSession(t *testing.T) {
 		PingEvery:    0,
 		ReconnectMin: 5 * time.Millisecond,
 		ReconnectMax: 20 * time.Millisecond,
-		Log:          testLogger{t},
+		Log:          testLogger(t),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -286,8 +286,9 @@ func TestRelayRebindDropsSession(t *testing.T) {
 	r.Stop()
 }
 
-type testLogger struct{ t *testing.T }
-
-func (l testLogger) Printf(format string, args ...any) {
-	l.t.Logf("relay: "+format, args...)
+// testLogger logs through t.Logf.
+func testLogger(t *testing.T) func(format string, args ...any) {
+	return func(format string, args ...any) {
+		t.Logf("relay: "+format, args...)
+	}
 }

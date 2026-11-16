@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ntun-ng/internal/logx"
 	"ntun-ng/internal/mux"
 )
 
@@ -36,14 +37,6 @@ type Dialer interface {
 	DialSession(ctx context.Context) (io.ReadWriteCloser, error)
 }
 
-// Logger is the minimal logging surface used by the relay.
-type Logger interface {
-	Printf(format string, args ...any)
-}
-
-type discardLogger struct{}
-
-func (discardLogger) Printf(string, ...any) {}
 
 // Options tunes the Relay reconnect loop.
 type Options struct {
@@ -51,7 +44,7 @@ type Options struct {
 	PingEvery    time.Duration
 	ReconnectMin time.Duration
 	ReconnectMax time.Duration
-	Log          Logger
+	Log          logx.Logger
 }
 
 // Relay maintains a live *mux.Session over a reconnecting SSH transport and
@@ -81,7 +74,7 @@ func New(opts Options) *Relay {
 		opts.ReconnectMax = 30 * time.Second
 	}
 	if opts.Log == nil {
-		opts.Log = discardLogger{}
+		opts.Log = logx.Discard
 	}
 	r := &Relay{
 		opts:     opts,
@@ -107,13 +100,13 @@ func (r *Relay) Run(ctx context.Context) error {
 		}
 		rwc, err := r.opts.Dialer.DialSession(ctx)
 		if err != nil {
-			r.opts.Log.Printf("relay: dial failed: %v", err)
+			r.opts.Log("relay: dial failed: %v", err)
 			r.backoff(ctx, attempt)
 			attempt++
 			continue
 		}
 		attempt = 0
-		r.opts.Log.Printf("relay: session established")
+		r.opts.Log("relay: session established")
 
 		sess := mux.NewSession(rwc, mux.SessionConfig{
 			AcceptFunc: nil, // local side never accepts
@@ -126,7 +119,7 @@ func (r *Relay) Run(ctx context.Context) error {
 		select {
 		case <-sess.Done():
 		case <-r.rebindCh:
-			r.opts.Log.Printf("relay: rebind requested, dropping session")
+			r.opts.Log("relay: rebind requested, dropping session")
 			_ = rwc.Close()
 			<-sess.Done()
 		case <-ctx.Done():
@@ -135,7 +128,7 @@ func (r *Relay) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 		if err := sess.Err(); err != nil {
-			r.opts.Log.Printf("relay: session ended: %v", err)
+			r.opts.Log("relay: session ended: %v", err)
 		}
 		r.publishSession(nil)
 
