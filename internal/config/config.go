@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"time"
 )
 
@@ -20,8 +20,12 @@ const (
 	AuthAgent    Auth = "agent"
 )
 
-// Config is the on-disk JSON configuration.
+// Config is the on-disk JSON configuration of one profile.
 type Config struct {
+	// Profile is the profile name this config was found under. Set by
+	// LoadFile; not part of the JSON schema.
+	Profile string `json:"-"`
+
 	Username string `json:"username"`
 	// Password is the plaintext password (when Auth == "password"). If empty
 	// and Auth == "password", ntun prompts on the terminal.
@@ -165,15 +169,13 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Load reads and parses a JSON config file and applies Defaults + Validate.
-func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("config: %w", err)
-	}
+// Load reads and parses a single profile body (used by tests and internal
+// helpers). The ntun CLI uses LoadFile, which enforces the multi-profile
+// top-level schema.
+func Load(r io.Reader) (*Config, error) {
 	var c Config
-	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	if err := json.NewDecoder(r).Decode(&c); err != nil {
+		return nil, fmt.Errorf("config: parse: %w", err)
 	}
 	c.Defaults()
 	if err := c.Validate(); err != nil {

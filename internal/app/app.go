@@ -30,6 +30,9 @@ func Run(ctx context.Context, cfg *config.Config, log logx.Logger) error {
 	if log == nil {
 		log = logx.Discard
 	}
+	if cfg.Profile == "" {
+		return fmt.Errorf("app: profile name required")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -62,7 +65,7 @@ func Run(ctx context.Context, cfg *config.Config, log logx.Logger) error {
 	for _, r := range added {
 		routeCIDRs = append(routeCIDRs, r.CIDR)
 	}
-	if _, err := state.Write(state.File{
+	if err := state.Write(cfg.Profile, state.File{
 		Version:        1,
 		PID:            os.Getpid(),
 		StartedAt:      time.Now(),
@@ -72,7 +75,7 @@ func Run(ctx context.Context, cfg *config.Config, log logx.Logger) error {
 	}); err != nil {
 		log("app: state write: %v", err)
 	}
-	defer state.Remove()
+	defer func() { _ = state.Remove(cfg.Profile) }()
 
 	// 3. Post-start script.
 	if cfg.PostStartScript != "" {

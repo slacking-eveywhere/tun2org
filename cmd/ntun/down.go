@@ -13,35 +13,68 @@ import (
 	"ntun-ng/internal/state"
 )
 
-// runDown implements `ntun down`: read the state file (if any), kill the
-// running pid, remove routes, bring the TUN down, run the post-stop script.
-// Idempotent — safe to run when nothing is up.
+// runDown implements `ntun down [PROFILE]...`: read the state file, kill the
+// running profiles' pids, remove routes, bring the TUN devices down, run the
+// post-stop scripts. Without arguments every recorded profile is torn down
+// (including any pre-multi-profile leftover). Idempotent — safe to run when
+// nothing is up.
 func runDown(args []string) int {
 	fs := flag.NewFlagSet("down", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	want := fs.Args()
 
-	if !state.Exists() {
-		fmt.Fprintln(os.Stderr, "ntun: no state file, nothing to tear down")
-		return 0
-	}
-	st, err := state.Read()
+	set, err := state.Read()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ntun: read state: %v\n", err)
 		return 1
 	}
+	if len(set) == 0 {
+		fmt.Fprintln(os.Stderr, "ntun: no state file, nothing to tear down")
+		return 0
+	}
 
-	// 1. Stop the running process (if alive). SIGTERM first, then SIGKILL.
-	if st.PID > 0 {
-		if alive(st.PID) {
-			fmt.Fprintf(os.Stderr, "ntun: stopping pid %d\n", st.PID)
-			_ = syscall.Kill(st.PID, syscall.SIGTERM)
-			if !waitDead(st.PID, 5*time.Second) {
-				fmt.Fprintf(os.Stderr, "ntun: pid %d did not exit, sending SIGKILL\n", st.PID)
-				_ = syscall.Kill(st.PID, syscall.SIGKILL)
-				_ = waitDead(st.PID, 5*time.Second)
+	targets := make([]string, 0, len(set))
+	if len(want) == 0 {
+		for name := range set {
+			targets = append(targets, name)
+		}
+	} else {
+		for _, w := range want {
+			if _, ok := set[w]; !ok {
+				known := make([]string, 0, len(set))
+				for n := range set {
+					known = append(known, n)
+				}
+				fmt.Fprintf(os.Stderr, "ntun: no state for profile %q (recorded: %v)\n", w, known)
+				return 1
 			}
+			targets = append(targets, w)
+		}
+	}
+
+	for _, name := range targets {
+		teardownProfile(name, set[name])
+		if err := state.Remove(name); err != nil {
+			fmt.Fprintf(os.Stderr, "ntun: state remove %s: %v\n", name, err)
+		}
+	}
+	fmt.Fprintln(os.Stderr, "ntun: torn down")
+	return 0
+}
+
+// teardownProfile stops the process, removes routes, deletes the TUN device
+// and runs the post-stop script of one profile (best-effort).
+func teardownProfile(name string, st state.File) {
+	// 1. Stop the running process (if alive). SIGTERM first, then SIGKILL.
+	if st.PID > 0 && alive(st.PID) {
+		fmt.Fprintf(os.Stderr, "ntun: [%s] stopping pid %d\n", name, st.PID)
+		_ = syscall.Kill(st.PID, syscall.SIGTERM)
+		if !waitDead(st.PID, 5*time.Second) {
+			fmt.Fprintf(os.Stderr, "ntun: [%s] pid %d did not exit, sending SIGKILL\n", name, st.PID)
+			_ = syscall.Kill(st.PID, syscall.SIGKILL)
+			_ = waitDead(st.PID, 5*time.Second)
 		}
 	}
 
@@ -49,7 +82,7 @@ func runDown(args []string) int {
 	if st.Device != "" && len(st.Routes) > 0 {
 		m := route.NewManager(st.Device)
 		if err := m.Remove(); err != nil {
-			fmt.Fprintf(os.Stderr, "ntun: route cleanup: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ntun: [%s] route cleanup: %v\n", name, err)
 		}
 	}
 
@@ -61,16 +94,11 @@ func runDown(args []string) int {
 
 	// 4. Post-stop script.
 	if st.PostStopScript != "" {
-		fmt.Fprintln(os.Stderr, "ntun: running post_stop_script")
+		fmt.Fprintf(os.Stderr, "ntun: [%s] running post_stop_script\n", name)
 		cmd := exec.Command("sh", "-c", st.PostStopScript)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		_ = cmd.Run()
 	}
-
-	// 5. Remove the state file.
-	_ = state.Remove()
-	fmt.Fprintln(os.Stderr, "ntun: torn down")
-	return 0
 }
 
 // alive reports whether a process with the given pid exists.

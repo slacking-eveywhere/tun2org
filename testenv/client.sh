@@ -33,14 +33,16 @@ write_config() {
     fi
     cat > "$CFG" <<EOF
 {
-  "username": "root",
-  "password": "$PASSWORD",
-  "forward_server": "forward",
-  "forward_port": 22,
-  "auth": "password",
-  $proxy
-  "routes": ["172.31.0.0/24"],
-  "dns_hijack": false
+  "e2e": {
+    "username": "root",
+    "password": "$PASSWORD",
+    "forward_server": "forward",
+    "forward_port": 22,
+    "auth": "password",
+    $proxy
+    "routes": ["172.31.0.0/24"],
+    "dns_hijack": false
+  }
 }
 EOF
 }

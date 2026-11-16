@@ -20,18 +20,36 @@ func configInit(path string) int {
 		fmt.Fprintf(os.Stderr, "ntun: %s already exists\n", path)
 		return 2
 	}
-	example := config.Config{
-		Username:        "your-login",
-		ForwardServer:   "bla.bli.blou",
-		Auth:            config.AuthPassword,
-		Routes:          []string{"10.120.1.10/32", "10.135.0.0/16"},
-		TunDevice:       "tun0",
-		TunNetwork:      "198.18.0.1/15",
-		PingEvery:       30 * time.Second,
-		ReconnectMin:    1 * time.Second,
-		ReconnectMax:    30 * time.Second,
-		PostStartScript: "",
-		PostStopScript:  "",
+	// Multi-profile example: one profile per tunnel, in file order.
+	// Field order in the struct fixes the JSON key order (maps would sort).
+	example := struct {
+		InternalServer config.Config `json:"internal_server"`
+		ExternalServer config.Config `json:"external_server"`
+	}{
+		InternalServer: config.Config{
+			Username:      "your-login",
+			ForwardServer: "10.0.0.5",
+			ForwardPort:   22,
+			Auth:          config.AuthPassword,
+			Routes:        []string{"10.120.1.10/32", "10.135.0.0/16"},
+			TunDevice:     "ntun0",
+			TunNetwork:    "198.18.0.1/15",
+			PingEvery:     30 * time.Second,
+			ReconnectMin:  1 * time.Second,
+			ReconnectMax:  30 * time.Second,
+		},
+		ExternalServer: config.Config{
+			Username:      "your-login",
+			ForwardServer: "172.16.0.9",
+			ForwardPort:   2222,
+			Auth:          config.AuthAgent,
+			Routes:        []string{"172.16.0.0/12"},
+			TunDevice:     "ntun1",
+			TunNetwork:    "198.20.0.1/15",
+			PingEvery:     30 * time.Second,
+			ReconnectMin:  1 * time.Second,
+			ReconnectMax:  30 * time.Second,
+		},
 	}
 	data, err := json.MarshalIndent(example, "", "  ")
 	if err != nil {

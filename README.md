@@ -53,16 +53,57 @@ installs the new version for everyone.
 ## Quick start
 
 ```sh
-ntun config edit                        # set username/forward_server/password/routes
-ntun test                               # connectivity probe (auth, agent upload, mux ping)
-ntun up                                 # bring the tunnel up (sudo if no setcap)
-ntun down                               # tear down
+ntun config edit                        # write profiles (username, forward_server, routes, ...)
+ntun check                              # validate the config (schema + cross-profile collisions)
+ntun test                               # connectivity probe per profile (auth, agent upload, mux ping)
+ntun up                                 # bring every profile's tunnel up (sudo if no setcap)
+ntun up --profile internal_server       # one profile only
+ntun down                               # tear down every running profile
+ntun down internal_server               # tear down one profile
 ```
 
 ## Configuration
 
-Config lives at `~/.tun2org/config.json`. See
-[config.dummy.json](config.dummy.json) for every option and its defaults.
+Config lives at `~/.tun2org/config.json`: a JSON object of profiles, one
+named tunnel per profile — `ntun up` runs them all in one process, docker
+compose style, with one `[abc]`-prefixed, per-profile-colored log stream
+(colors when stderr is a terminal; NO_COLOR honored).
+
+```json
+{
+  "internal_server": {
+    "username": "your-login",
+    "forward_server": "10.0.0.5",
+    "auth": "password",
+    "routes": ["10.120.0.0/16"],
+    "tun_device": "ntun0",
+    "tun_network": "198.18.0.1/15"
+  },
+  "external_server": {
+    "username": "your-login",
+    "forward_server": "172.16.0.9",
+    "forward_port": 2222,
+    "auth": "agent",
+    "routes": ["172.16.0.0/12"],
+    "tun_device": "ntun1",
+    "tun_network": "198.20.0.1/15"
+  }
+}
+```
+
+See [config.dummy.json](config.dummy.json) for every option and its
+defaults. Profile names are 1-32 characters of `[a-zA-Z0-9_-]` and become the
+log prefix: `internal_server` logs as `[int]`.
+
+With more than one profile, cross-profile collisions are rejected at load
+time: every profile needs a distinct `tun_device` and a `tun_network`
+(v4/v6) disjoint from every other profile's networks and routes, and
+`dns_listen` addresses must be unique. `ntun check` reports all of this
+without starting anything. Several profiles may share the same
+`forward_server` (they open separate sessions); `dns_hijack` may be enabled on
+several profiles (it intercepts UDP/53 on its own device only). Reach a
+jump host through `proxy_command` (e.g. `ssh -W %h:%p jumper`) inside a
+profile.
 
 ### Host key verification (TOFU)
 
