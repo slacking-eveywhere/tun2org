@@ -223,6 +223,29 @@ func (s *Session) enqueueCtlTimeout(typ FrameType, payload []byte, timeout time.
 	}
 }
 
+// Ping sends a PING frame and waits for the peer's PONG, bounded by timeout.
+// It proves the session is alive in both directions. The session's own
+// keepalive pingLoop (when PingEvery > 0) competes for the same pong, so
+// Ping is intended for sessions without keepalive (e.g. `ntun test`).
+func (s *Session) Ping(timeout time.Duration) error {
+	if s.closed.Load() {
+		return ErrSessionClosed
+	}
+	if err := s.enqueueCtlTimeout(TypePing, nil, pingWriteTimeout); err != nil {
+		return err
+	}
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-s.pongCh:
+		return nil
+	case <-s.done:
+		return ErrSessionClosed
+	case <-t.C:
+		return errors.New("mux: pong timeout")
+	}
+}
+
 // Open initiates a new muxed connection to addr (local/client side). It blocks
 // until the peer acknowledges (OPEN_OK) or reports a dial failure (ERR).
 func (s *Session) Open(addr Addr) (*Conn, error) {

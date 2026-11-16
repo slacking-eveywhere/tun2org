@@ -101,6 +101,19 @@ func tofuHostKeyCallback() (ssh.HostKeyCallback, error) {
 	}, nil
 }
 
+// KnownHostsPath returns the TOFU known_hosts path (exported for `ntun test`).
+func KnownHostsPath() (string, error) { return knownHostsPath() }
+
+// IsKnownHost reports whether addr already has a captured host key. On any
+// read error it reports false (callers treat unknown as "will capture").
+func IsKnownHost(addr string) bool {
+	entries, err := loadKnownHosts()
+	if err != nil {
+		return false
+	}
+	return len(entries[addr]) > 0
+}
+
 // hostKeyCallback returns the callback for the configured host key policy:
 // an explicit cfg.HostKey pins that key; otherwise TOFU.
 func (d *sshDialer) hostKeyCallback() (ssh.HostKeyCallback, error) {

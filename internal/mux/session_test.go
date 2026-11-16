@@ -183,6 +183,29 @@ func TestClosePropagates(t *testing.T) {
 	}
 }
 
+// TestPingRoundTrip drives the public Ping: local sends PING, agent replies
+// PONG.
+func TestPingRoundTrip(t *testing.T) {
+	local, stop := runPair(t, func(Addr) (net.Conn, error) {
+		return nil, errors.New("unreachable")
+	})
+	defer stop()
+	if err := local.Ping(2 * time.Second); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+}
+
+// TestPingTimeoutOnDeadTransport: a wedged transport must make Ping return
+// an error within the given timeout, not hang.
+func TestPingTimeoutOnDeadTransport(t *testing.T) {
+	sess := NewSession(newStalledConn(), SessionConfig{})
+	defer sess.Close()
+	go sess.Serve()
+	if err := sess.Ping(200 * time.Millisecond); err == nil {
+		t.Fatal("Ping succeeded on a stalled transport")
+	}
+}
+
 func TestPingPong(t *testing.T) {
 	// Build a pair with pings enabled on the local side.
 	localEnd, agentEnd := pipePair()

@@ -28,6 +28,8 @@ func main() {
 			os.Exit(runUp(os.Args[2:]))
 		case "down":
 			os.Exit(runDown(os.Args[2:]))
+		case "test":
+			os.Exit(runTest(os.Args[2:]))
 		case "config":
 			os.Exit(runConfig(os.Args[2:]))
 		case "help", "-h", "--help":
@@ -45,6 +47,7 @@ func usage() {
 Usage:
   ntun up    [--config PATH] [--username USER] [--forward-server HOST] [--mode direct|bastion] [--auth password|agent]
   ntun down
+  ntun test [--config PATH] [--target HOST:PORT] [--timeout DURATION]
   ntun config init [--config PATH]
   ntun config edit [--config PATH]
   ntun version
