@@ -2,7 +2,7 @@
 // remote ntun-agent. It handles:
 //
 //   - SSH authentication (password via keyboard-interactive, or ssh-agent),
-//   - direct vs bastion connection modes,
+//   - direct connection or any jump host via proxy_command,
 //   - uploading + caching the ntun-agent binary on the remote host,
 //   - exec'ing the agent over an SSH session and exposing its stdin/stdout as
 //     an io.ReadWriteCloser (the mux transport),

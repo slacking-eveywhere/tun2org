@@ -45,7 +45,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `%s
 
 Usage:
-  ntun up    [--config PATH] [--username USER] [--forward-server HOST] [--mode direct|bastion] [--auth password|agent]
+  ntun up    [--config PATH] [--username USER] [--forward-server HOST] [--auth password|agent]
   ntun down
   ntun test [--config PATH] [--target HOST:PORT] [--timeout DURATION]
   ntun config init [--config PATH]
@@ -67,7 +67,6 @@ func runUp(args []string) int {
 	cfgPath := fs.String("config", defaultConfigPath(), "path to JSON config")
 	username := fs.String("username", "", "override config.username")
 	forward := fs.String("forward-server", "", "override config.forward_server")
-	mode := fs.String("mode", "", "override config.mode (direct|bastion)")
 	auth := fs.String("auth", "", "override config.auth (password|agent)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -83,9 +82,6 @@ func runUp(args []string) int {
 	}
 	if *forward != "" {
 		cfg.ForwardServer = *forward
-	}
-	if *mode != "" {
-		cfg.Mode = config.Mode(*mode)
 	}
 	if *auth != "" {
 		cfg.Auth = config.Auth(*auth)
@@ -114,8 +110,8 @@ func runUp(args []string) int {
 		cancel()
 	}()
 
-	fmt.Fprintf(os.Stderr, "ntun: connecting to %s as %s (%s/%s)\n",
-		cfg.SSHHostPort(), cfg.SSHUser(), cfg.Mode, cfg.Auth)
+	fmt.Fprintf(os.Stderr, "ntun: connecting to %s as %s (auth %s)\n",
+		cfg.SSHHostPort(), cfg.Username, cfg.Auth)
 	if err := app.Run(ctx, cfg, logx.ToWriter(os.Stderr)); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "ntun: %v\n", err)
 		return 1

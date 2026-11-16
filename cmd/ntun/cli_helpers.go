@@ -21,11 +21,8 @@ func configInit(path string) int {
 		return 2
 	}
 	example := config.Config{
-		Username:        "your-ipa-login",
+		Username:        "your-login",
 		ForwardServer:   "bla.bli.blou",
-		Mode:            config.ModeBastion,
-		Bastion:         "relais-ssh.bli.blou",
-		BastionPort:     22,
 		Auth:            config.AuthPassword,
 		Routes:          []string{"10.120.1.10/32", "10.135.0.0/16"},
 		TunDevice:       "tun0",

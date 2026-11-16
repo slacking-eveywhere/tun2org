@@ -109,7 +109,7 @@ func (d *sshDialer) connect(ctx context.Context) (*ssh.Client, error) {
 		return nil, err
 	}
 	sshCfg := &ssh.ClientConfig{
-		User:            d.cfg.SSHUser(),
+		User:            d.cfg.Username,
 		Auth:            authMethods,
 		HostKeyCallback: hkcb,
 		Timeout:         20 * time.Second,

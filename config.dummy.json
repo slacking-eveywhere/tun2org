@@ -1,11 +1,8 @@
 {
-  "username": "your-ipa-login",
+  "username": "your-login",
   "password": "your-password-in-plaintext",
   "forward_server": "server.bla",
   "forward_port": 22,
-  "mode": "bastion",
-  "bastion": "relais-ssh.bla",
-  "bastion_port": 22,
   "auth": "password",
   "host_key": "",
   "agent_path": "ntun-agent",

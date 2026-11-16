@@ -37,7 +37,6 @@ write_config() {
   "password": "$PASSWORD",
   "forward_server": "forward",
   "forward_port": 22,
-  "mode": "direct",
   "auth": "password",
   $proxy
   "routes": ["172.31.0.0/24"],

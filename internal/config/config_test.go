@@ -33,14 +33,8 @@ func TestLoadMinimal(t *testing.T) {
 	if c.Username != "alice" {
 		t.Errorf("Username = %q", c.Username)
 	}
-	if c.Mode != config.ModeBastion {
-		t.Errorf("Mode default = %q, want bastion", c.Mode)
-	}
 	if c.Auth != config.AuthPassword {
 		t.Errorf("Auth default = %q, want password", c.Auth)
-	}
-	if c.Bastion != "relais-ssh.bli.blou" {
-		t.Errorf("Bastion default = %q", c.Bastion)
 	}
 	if c.PingEvery != 30*time.Second {
 		t.Errorf("PingEvery = %v", c.PingEvery)
@@ -50,41 +44,17 @@ func TestLoadMinimal(t *testing.T) {
 	}
 }
 
-func TestLoadDirect(t *testing.T) {
+func TestSSHHostPortDefaultPort(t *testing.T) {
 	p := writeTemp(t, "config.json", `{
 		"username": "alice",
-		"forward_server": "bla.bli.blou",
-		"mode": "direct"
+		"forward_server": "bla.bli.blou"
 	}`)
 	c, err := config.Load(p)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if c.SSHUser() != "alice" {
-		t.Errorf("direct SSHUser = %q, want alice", c.SSHUser())
-	}
-	want := "bla.bli.blou:22"
-	if c.SSHHostPort() != want {
-		t.Errorf("direct SSHHostPort = %q, want %q", c.SSHHostPort(), want)
-	}
-}
-
-func TestLoadBastionUserDance(t *testing.T) {
-	p := writeTemp(t, "config.json", `{
-		"username": "alice",
-		"forward_server": "bla.bli.blou",
-		"mode": "bastion",
-		"bastion": "relais-ssh.bli.blou"
-	}`)
-	c, err := config.Load(p)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got := c.SSHUser(); got != "alice@bla.bli.blou" {
-		t.Errorf("bastion SSHUser = %q", got)
-	}
-	if got := c.SSHHostPort(); got != "relais-ssh.bli.blou:22" {
-		t.Errorf("bastion SSHHostPort = %q", got)
+	if got := c.SSHHostPort(); got != "bla.bli.blou:22" {
+		t.Errorf("SSHHostPort = %q, want bla.bli.blou:22", got)
 	}
 }
 
@@ -93,14 +63,6 @@ func TestLoadMissingUsername(t *testing.T) {
 	_, err := config.Load(p)
 	if err == nil || !strings.Contains(err.Error(), "username") {
 		t.Fatalf("expected username error, got %v", err)
-	}
-}
-
-func TestLoadInvalidMode(t *testing.T) {
-	p := writeTemp(t, "config.json", `{"username":"u","forward_server":"h","mode":"teleport"}`)
-	_, err := config.Load(p)
-	if err == nil || !strings.Contains(err.Error(), "mode") {
-		t.Fatalf("expected mode error, got %v", err)
 	}
 }
 
@@ -163,7 +125,7 @@ func TestLoadDurationMarshalRoundTrip(t *testing.T) {
 func TestLoadProxyCommand(t *testing.T) {
 	p := writeTemp(t, "config.json", `{
 		"username":"root","forward_server":"195.154.160.42","forward_port":60001,
-		"mode":"direct","proxy_command":"ssh -W %h:%p srr1-lb-prd-si01"
+		"proxy_command":"ssh -W %h:%p srr1-lb-prd-si01"
 	}`)
 	c, err := config.Load(p)
 	if err != nil {
@@ -175,8 +137,8 @@ func TestLoadProxyCommand(t *testing.T) {
 	if c.SSHHostPort() != "195.154.160.42:60001" {
 		t.Fatalf("SSHHostPort = %q", c.SSHHostPort())
 	}
-	if c.SSHUser() != "root" {
-		t.Fatalf("SSHUser = %q", c.SSHUser())
+	if c.Username != "root" {
+		t.Fatalf("Username = %q", c.Username)
 	}
 }
 

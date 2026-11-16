@@ -12,17 +12,6 @@ import (
 	"time"
 )
 
-// Mode selects how ntun reaches the forward server.
-type Mode string
-
-const (
-	// ModeDirect: SSH straight to forward_server:22 as <username>.
-	ModeDirect Mode = "direct"
-	// ModeBastion: SSH to bastion:22 as <username>@<forward_server> (the
-	// relay username dance; the relay routes the session to forward_server).
-	ModeBastion Mode = "bastion"
-)
-
 // Auth selects the SSH authentication method.
 type Auth string
 
@@ -41,14 +30,8 @@ type Config struct {
 	// ForwardServer is the target host inside the SIS network
 	// (e.g. bla.bli.blou).
 	ForwardServer string `json:"forward_server"`
-	// ForwardPort is the SSH port on the forward server (direct mode). Default 22.
+	// ForwardPort is the SSH port on the forward server. Default 22.
 	ForwardPort int `json:"forward_port,omitempty"`
-
-	// Mode is direct or bastion. Default bastion.
-	Mode    Mode   `json:"mode,omitempty"`
-	Bastion string `json:"bastion,omitempty"`
-	// BastionPort is the relay SSH port. Default 22.
-	BastionPort int `json:"bastion_port,omitempty"`
 
 	// Auth is "password" or "agent". Default password.
 	Auth Auth `json:"auth,omitempty"`
@@ -110,17 +93,8 @@ type Config struct {
 
 // Defaults applies zero-value defaults.
 func (c *Config) Defaults() {
-	if c.Mode == "" {
-		c.Mode = ModeBastion
-	}
 	if c.Auth == "" {
 		c.Auth = AuthPassword
-	}
-	if c.Bastion == "" {
-		c.Bastion = "relais-ssh.bli.blou"
-	}
-	if c.BastionPort == 0 {
-		c.BastionPort = 22
 	}
 	if c.ForwardPort == 0 {
 		c.ForwardPort = 22
@@ -160,11 +134,6 @@ func (c *Config) Validate() error {
 	if c.ForwardServer == "" {
 		return errors.New("config: forward_server is required")
 	}
-	switch c.Mode {
-	case ModeDirect, ModeBastion:
-	default:
-		return fmt.Errorf("config: invalid mode %q", c.Mode)
-	}
 	switch c.Auth {
 	case AuthPassword, AuthAgent:
 	default:
@@ -173,22 +142,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// SSHUser returns the SSH username for the configured mode.
-//
-// Bastion mode uses the relay dance: <user>@<forward_server>, which the
-// relay routes to the forward server. Direct mode uses <user> verbatim.
-func (c *Config) SSHUser() string {
-	if c.Mode == ModeBastion {
-		return c.Username + "@" + c.ForwardServer
-	}
-	return c.Username
-}
-
-// SSHHostPort returns the dial target (host:port) for the configured mode.
+// SSHHostPort returns the dial target (host:port) of the forward server.
+// Reach it through a jump host with proxy_command.
 func (c *Config) SSHHostPort() string {
-	if c.Mode == ModeBastion {
-		return fmt.Sprintf("%s:%d", c.Bastion, c.BastionPort)
-	}
 	return fmt.Sprintf("%s:%d", c.ForwardServer, c.ForwardPort)
 }
 

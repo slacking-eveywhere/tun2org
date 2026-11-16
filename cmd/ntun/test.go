@@ -44,8 +44,8 @@ func runTest(args []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	fmt.Fprintf(os.Stderr, "ntun: testing %s as %s (%s/%s)\n",
-		cfg.SSHHostPort(), cfg.SSHUser(), cfg.Mode, cfg.Auth)
+	fmt.Fprintf(os.Stderr, "ntun: testing %s as %s (auth %s)\n",
+		cfg.SSHHostPort(), cfg.Username, cfg.Auth)
 
 	wasKnown := relay.IsKnownHost(cfg.SSHHostPort())
 
