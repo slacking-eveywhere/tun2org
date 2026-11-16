@@ -27,23 +27,28 @@ If `~/.local/bin` is not on your `PATH`, add it:
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile   # or ~/.bashrc / ~/.zshrc
 ```
 
-### Uninstall
+To remove:
 
 ```sh
+install.sh uninstall   # if you kept the script; otherwise:
 rm -f ~/.local/bin/ntun ~/.local/bin/ntun-agent
-rm -rf ~/.tun2org   # optional: config, known_hosts, state
+rm -rf ~/.tun2org      # optional: config, known_hosts, state
 ```
 
-### Build from source
+### Build from source (developers)
 
-Needs Go 1.23+. Cross-compiles all supported targets into `dist/` and
-generates `dist/SHA256SUMS`; commit and push `dist/`, then the one-liner
-installs the new version for everyone:
+Needs Go 1.23+. Dev tasks live in the [Makefile](Makefile) — `make help`
+for the full list:
 
 ```sh
-./install.sh build
-./install.sh install   # dev shortcut: install the local platform from dist/
+make build     # cross-compile all targets into dist/ + SHA256SUMS
+make install   # build + install the local platform into ~/.local/bin
+make test      # go test ./...
+make uninstall # remove ~/.local/bin/{ntun,ntun-agent}
 ```
+
+`make build` is the release flow: commit and push `dist/`, and the one-liner
+installs the new version for everyone.
 
 ## Quick start
 
