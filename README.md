@@ -78,7 +78,25 @@ The one-liner executes a script fetched over TLS from this repository. The
 SHA256 checksums it verifies protect the download against transport
 corruption; they are stored in the same repository, so a compromised repo
 compromises both. If that matters to you, clone the repo, audit, and use
-`./install.sh build` + `./install.sh install`.
+`make build` + `make install`.
+
+## E2E tests (developers, docker required)
+
+Runs the real `ntun` (built in-image from the repo) through a dockerized
+topology: an SSH forward server (password auth, tcp-forwarding disabled — the
+real-world constraint), an SSH bastion, and HTTP/TCP/UDP endpoints reachable
+only through the tunnel. Two scenarios: direct, and through the bastion via
+`ssh -W`.
+
+```sh
+make e2e                    # both scenarios
+./testenv/run.sh bastion    # one scenario only
+./testenv/run.sh --keep     # leave the env up for debugging (teardown hint printed)
+```
+
+Everything runs in containers (privileged client with `/dev/net/tun` for the
+real TUN path); every command is bounded by a timeout controller, and the
+environment is torn down on any exit. Needs `docker compose` v2.
 
 ## License
 

@@ -30,7 +30,7 @@ PLAT := unsupported
 endif
 
 .ONESHELL:
-.PHONY: help fmt vet test test-race build install uninstall clean
+.PHONY: help fmt vet test test-race e2e build install uninstall clean
 
 help:
 	@echo "tun2org dev tasks (users: curl .../install.sh | sh):"
@@ -38,6 +38,7 @@ help:
 	@echo "  vet        go vet ./..."
 	@echo "  test       go test ./... (with -timeout)"
 	@echo "  test-race  race detector on the concurrency-critical pkgs"
+	@echo "  e2e        dockerized real-tunnel end-to-end tests (docker required)"
 	@echo "  build      cross-compile release targets into dist/ + SHA256SUMS"
 	@echo "  install    install the local platform from dist/ into BIN_DIR"
 	@echo "  uninstall  remove binaries from BIN_DIR"
@@ -55,6 +56,9 @@ test:
 
 test-race:
 	go test -race -count=2 -timeout 300s ./internal/mux/ ./internal/relay/
+
+e2e:
+	./testenv/run.sh
 
 build:
 	rm -f $(DIST)/ntun_* $(DIST)/ntun-agent_* $(DIST)/SHA256SUMS

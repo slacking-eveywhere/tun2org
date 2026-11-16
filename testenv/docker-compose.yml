@@ -1,0 +1,84 @@
+# tun2org e2e topology.
+#
+#   edge (172.30.0.0/24):     client, bastion, forward   — "the internet"
+#   internal (172.31.0.0/24):  forward, target            — "the SIS side"
+#
+# The client has NO interface on `internal`: the only route to the target is
+# the tunnel (ntun routes 172.31.0.0/24 through the TUN). SSH to bastion and
+# forward stays on `edge`, so the transport never loops through the tunnel.
+#
+# Requires docker compose v2. The client container is privileged with
+# /dev/net/tun so the real `ntun up` path (TUN + routes) runs for real.
+
+name: ntun-e2e
+
+services:
+    keygen:
+        build:
+            context: ..
+            dockerfile: testenv/Dockerfile
+            target: keygen
+        volumes:
+            - ./.run/keys:/keys
+
+    bastion:
+        build:
+            context: ..
+            dockerfile: testenv/Dockerfile
+            target: bastion
+        volumes:
+            - ./.run/keys:/run/keys:ro
+        networks:
+            edge:
+                ipv4_address: 172.30.0.20
+
+    forward:
+        build:
+            context: ..
+            dockerfile: testenv/Dockerfile
+            target: forward
+        environment:
+            PASSWORD: testpass
+        networks:
+            edge:
+                ipv4_address: 172.30.0.21
+            internal:
+                ipv4_address: 172.31.0.21
+
+    target:
+        build:
+            context: ..
+            dockerfile: testenv/Dockerfile
+            target: target
+        networks:
+            internal:
+                ipv4_address: 172.31.0.10
+
+    client:
+        build:
+            context: ..
+            dockerfile: testenv/Dockerfile
+            target: client
+        privileged: true
+        devices:
+            - /dev/net/tun:/dev/net/tun
+        environment:
+            PASSWORD: testpass
+            TARGET_IP: 172.31.0.10
+        volumes:
+            - ./.run/keys:/run/keys:ro
+        networks:
+            edge:
+        # runs via: docker compose run --rm client <direct|bastion>
+
+networks:
+    edge:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.30.0.0/24
+    internal:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.31.0.0/24

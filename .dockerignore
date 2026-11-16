@@ -1,0 +1,5 @@
+# keep the docker build context small and free of binaries/keys
+.git
+dist
+testenv/.run
+.docs_and_plans
