@@ -321,20 +321,7 @@ func (d *sshDialer) authMethods() ([]ssh.AuthMethod, error) {
 	}
 }
 
-// hostKeyCallback returns a pinned or insecure callback.
-func (d *sshDialer) hostKeyCallback() (ssh.HostKeyCallback, error) {
-	if d.cfg.HostKey == "" {
-		// Mirrors legacy behaviour (ssh.InsecureIgnoreHostKey). Pin via `ntun test`.
-		return ssh.InsecureIgnoreHostKey(), nil
-	}
-	// HostKey is an authorized_keys-style line ("ssh-ed25519 AAAA...") for the
-	// dialed host.
-	pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(d.cfg.HostKey))
-	if err != nil {
-		return nil, fmt.Errorf("relay: parse host_key: %w", err)
-	}
-	return ssh.FixedHostKey(pub), nil
-}
+// hostKeyCallback lives in hostkey.go (explicit pin or TOFU).
 
 // remoteAgentPath returns the absolute cache path on the forward server, given
 // the remote user's (already resolved) home directory. The result contains no
