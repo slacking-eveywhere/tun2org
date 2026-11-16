@@ -1,58 +1,79 @@
-# ntun-ng
+# tun2org
 
 System-level SSH tunnel. Routes selected traffic through a remote forward
 server over a TUN device. Client (`ntun`) + remote agent (`ntun-agent`).
 
-## Requirements
+Supported platforms: **linux/amd64, linux/arm64, macOS/Apple Silicon (arm64)**.
+The client needs `CAP_NET_ADMIN` (the installer grants it via `setcap`, or use
+`sudo`).
 
-- Linux, or macOS (arm64)
-- `CAP_NET_ADMIN` on the client (use `sudo`, or let the installer run `setcap`)
-- Go 1.23+ only if you build from source (prebuilt binaries don't need it)
+## Install / update
 
-## Install
-
-### Prebuilt binaries
-
-Grab the `dist/` binaries (committed to this repo) and install them:
+One line — installs into `~/.local/bin`, no Go required:
 
 ```sh
-./install.sh install
+curl -fsSL https://raw.githubusercontent.com/slacking-eveywhere/tun2org/main/install.sh | sh
 ```
 
-This copies `ntun` + `ntun-agent` to `~/.local/bin`, optionally grants
-`CAP_NET_ADMIN` so `sudo` isn't needed, and writes a placeholder config to
-`~/.tun2org/config.json`.
+**Installing and updating are the same thing**: re-run the one-liner to
+update. The binaries and their SHA256 checksums are downloaded from this
+repository (`dist/` on branch `main`), verified, and copied into
+`~/.local/bin`. Your `~/.tun2org/` directory (config, known_hosts, state) is
+never touched.
 
-Make sure `~/.local/bin` is on your `PATH`.
-
-### Build from source
+If `~/.local/bin` is not on your `PATH`, add it:
 
 ```sh
-go mod tidy
-./install.sh build    # compiles static binaries into ./dist
-./install.sh install  # then installs them
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile   # or ~/.bashrc / ~/.zshrc
 ```
 
 ### Uninstall
 
 ```sh
-./install.sh uninstall
+rm -f ~/.local/bin/ntun ~/.local/bin/ntun-agent
+rm -rf ~/.tun2org   # optional: config, known_hosts, state
 ```
 
-Leaves `~/.tun2org` (config + state) behind — remove it manually if you want it gone.
+### Build from source
+
+Needs Go 1.23+. Cross-compiles all supported targets into `dist/` and
+generates `dist/SHA256SUMS`; commit and push `dist/`, then the one-liner
+installs the new version for everyone:
+
+```sh
+./install.sh build
+./install.sh install   # dev shortcut: install the local platform from dist/
+```
 
 ## Quick start
 
 ```sh
-ntun config edit   # set username/forward_server/password/routes
-ntun up            # bring the tunnel up (sudo if no setcap)
-ntun down          # tear down
+ntun config edit                        # set username/forward_server/password/routes
+ntun test                               # connectivity probe (auth, agent upload, mux ping)
+ntun up                                 # bring the tunnel up (sudo if no setcap)
+ntun down                               # tear down
 ```
 
 ## Configuration
 
-Config at `~/.tun2org/config.json`. See `config.dummy.json` for every option and
-their defaults.
+Config lives at `~/.tun2org/config.json`. See
+[config.dummy.json](config.dummy.json) for every option and its defaults.
+
+### Host key verification (TOFU)
+
+The server's host key is verified trust-on-first-use, OpenSSH style: the
+first connection captures the key into `~/.tun2org/known_hosts`; any later
+mismatch aborts the connection (possible MITM). To pre-pin instead, set
+`host_key` in the config to an authorized-keys-format line; `ntun test`
+reports the current pinning status.
+
+## Security note on curl | sh
+
+The one-liner executes a script fetched over TLS from this repository. The
+SHA256 checksums it verifies protect the download against transport
+corruption; they are stored in the same repository, so a compromised repo
+compromises both. If that matters to you, clone the repo, audit, and use
+`./install.sh build` + `./install.sh install`.
 
 ## License
 
